@@ -84,40 +84,23 @@ public:
     Supercluster(const GeoJSONFeatures &features_, const Options options_ = Options())
         : features(features_), options(options_) {
 
-        std::vector<Cluster> clusters;
-
 #ifdef DEBUG_TIMER
         Timer timer;
 #endif
-        // generate a cluster object for each point
-        std::size_t i = 0;
-        for (const auto &f : features) {
-            const auto &p = f.geometry.get<GeoJSONPoint>();
-            clusters.push_back({ lngX(p.x), latY(p.y), 1, i++ });
-        }
+
+        zooms.emplace(options.maxZoom + 1, features);
+
 #ifdef DEBUG_TIMER
         timer("generate single point clusters");
 #endif
 
-        // cluster points on max zoom, then cluster the results on previous zoom, etc.;
-        // results in a cluster hierarchy across zoom levels
-        auto &zoomClusters = clusters;
-
         for (int z = options.maxZoom; z >= options.minZoom; z--) {
-            // index input points into a KD-tree
-            trees.emplace(z + 1, zoomClusters);
-            clustersByZoom[z + 1] = zoomClusters;
+            zooms.emplace(z, zooms[z + 1], options.radius / (options.extent * std::pow(2, z)));
 
-            // create a new set of clusters for the zoom
-            zoomClusters = clusterZoom(zoomClusters, z);
 #ifdef DEBUG_TIMER
-            timer(std::to_string(zoomClusters.size()) + " clusters");
+            timer(std::to_string(zooms[z].clusters.size()) + " clusters");
 #endif
         }
-
-        // index top-level clusters
-        trees.emplace(options.minZoom, zoomClusters);
-        clustersByZoom[options.minZoom] = zoomClusters;
     }
 
     TileFeatures getTile(std::uint8_t z, std::uint32_t x, std::uint32_t y) {
@@ -154,41 +137,58 @@ public:
     }
 
 private:
-    std::unordered_map<std::uint8_t, kdbush::KDBush<Cluster>> trees;
-    std::unordered_map<std::uint8_t, std::vector<Cluster>> clustersByZoom;
-
-    std::vector<Cluster> clusterZoom(std::vector<Cluster> &points, std::uint8_t zoom) {
+    struct Zoom {
+        kdbush::KDBush<Cluster> bush;
         std::vector<Cluster> clusters;
 
-        double const r = options.radius / (options.extent * std::pow(2, zoom));
+        Zoom(const GeoJSONFeatures &features) {
+            // generate a cluster object for each point
+            std::size_t i = 0;
 
-        for (auto &p : points) {
-            if (p.visited) continue;
-            p.visited = true;
+            for (const auto &f : features) {
+                const auto &p = f.geometry.get<GeoJSONPoint>();
+                clusters.push_back({ lngX(p.x), latY(p.y), 1, i++ });
+            }
 
-            auto num_points = p.num_points;
-            double wx = p.x * num_points;
-            double wy = p.y * num_points;
-
-            // find all nearby points
-            trees.find(zoom + 1)->second.within(p.x, p.y, r, [&](const auto &id) {
-                auto &b = points[id];
-
-                // skip neighbors that are already processed
-                if (b.visited) return;
-                b.visited = true;
-
-                // accumulate coordinates for calculating weighted center
-                wx += b.x * b.num_points;
-                wy += b.y * b.num_points;
-                num_points += b.num_points;
-            });
-
-            clusters.push_back({ wx / num_points, wy / num_points, num_points });
+            bush.fill(clusters);
         }
 
-        return clusters;
-    }
+        Zoom(Zoom& previous, double r) {
+            for (auto &p : previous.clusters) {
+                // if we've already visited the point at this zoom level, skip it
+                if (p.visited) continue;
+                p.visited = true;
+
+                auto num_points = p.num_points;
+                double wx = p.x * num_points;
+                double wy = p.y * num_points;
+
+                // find all nearby points
+                previous.bush.within(p.x, p.y, r, [&](const auto &id) {
+                    auto &b = previous.clusters[id];
+
+                    // filter out neighbors that are already processed
+                    if (b.visited) return;
+                    b.visited = true;
+
+                    // accumulate coordinates for calculating weighted center
+                    wx += b.x * b.num_points;
+                    wy += b.y * b.num_points;
+                    num_points += b.num_points;
+                });
+
+                if (num_points != p.num_points) { // found neighbors
+                    clusters.push_back({ wx / num_points, wy / num_points, num_points });
+                } else {
+                    clusters.push_back(p);
+                }
+            }
+
+            bush.fill(clusters);
+        }
+    };
+
+    std::unordered_map<std::uint8_t, Zoom> zooms;
 
     std::uint8_t limitZoom(std::uint8_t z) {
         return std::max(
