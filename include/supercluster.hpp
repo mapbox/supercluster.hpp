@@ -91,7 +91,7 @@ public:
 #endif
         // generate a cluster object for each point
         std::size_t i = 0;
-        for (auto f : features) {
+        for (const auto &f : features) {
             const auto &p = f.geometry.get<GeoJSONPoint>();
             Cluster c = { lngX(p.x), latY(p.y), 1, i++ };
             clusters.push_back(c);
