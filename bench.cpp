@@ -48,7 +48,7 @@ int main() {
     timer("query zero tile");
     std::cerr << tile.size() << " features in tile 0-0-0:\n";
 
-    for (auto f : tile) {
+    for (auto &f : tile) {
         if (f.properties["cluster"].get<bool>()) {
             std::cerr << "cluster: " << f.properties["point_count"].get<std::uint64_t>() << "\n";
         } else {

@@ -15,7 +15,7 @@ $(MASON_DIR):
 mason_packages: $(MASON_DIR)
 	$(MASON) install variant 1.1.0
 	$(MASON) install rapidjson 1.0.2
-	$(MASON) install geometry 0.2.0
+	$(MASON) install geometry 0.3.0
 
 build/bench: bench.cpp include/* mason_packages Makefile
 	mkdir -p build
