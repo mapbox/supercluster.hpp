@@ -2,41 +2,40 @@
 #include <rapidjson/document.h>
 #include <rapidjson/filereadstream.h>
 
+#include <supercluster.hpp>
+
 #include <cassert>
 #include <chrono>
 #include <cstdio>
 #include <iostream>
 #include <vector>
 
-namespace bench {
-
-static std::chrono::time_point<std::chrono::high_resolution_clock> started;
-
-void start() {
-    started = std::chrono::high_resolution_clock::now();
-}
-
-void report(std::string msg) {
-    const auto finished = std::chrono::high_resolution_clock::now();
-    std::cerr << msg << ": "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(finished - started).count()
-              << "ms\n";
-    started = finished;
-}
-
-} // namespace bench
+class Timer {
+public:
+    std::chrono::high_resolution_clock::time_point started;
+    Timer() {
+        started = std::chrono::high_resolution_clock::now();
+    }
+    void operator()(std::string msg) {
+        const auto now = std::chrono::high_resolution_clock::now();
+        const auto ms = std::chrono::duration_cast<std::chrono::microseconds>(now - started);
+        std::cerr << msg << ": " << double(ms.count()) / 1000 << "ms\n";
+        started = now;
+    }
+};
 
 int main() {
     std::FILE *fp = std::fopen("../supercluster/tmp/trees-na2.json", "r");
-    char readBuffer[65536];
-    rapidjson::FileReadStream is(fp, readBuffer, sizeof(readBuffer));
+    char buffer[65536];
+    rapidjson::FileReadStream is(fp, buffer, sizeof(buffer));
 
-    bench::start();
+    Timer timer;
+
     rapidjson::Document d;
     d.ParseStream(is);
-    bench::report("parse JSON");
+    timer("parse JSON");
 
-    mapbox::geometry::feature_collection<double> collection;
+    mapbox::geometry::feature_collection<double> features;
 
     const auto &json_features = d["features"];
 
@@ -46,9 +45,11 @@ int main() {
         const auto lat = json_coords[1].GetDouble();
         mapbox::geometry::point<double> point(lng, lat);
         mapbox::geometry::feature<double> feature{ point };
-        collection.push_back(feature);
+        features.push_back(feature);
     }
-    bench::report("convert to geometry.hpp");
+    timer("convert to geometry.hpp");
 
-    return 0;
+    mapbox::supercluster::Supercluster index(features);
+
+    timer("construct supercluster");
 }
