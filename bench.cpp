@@ -43,4 +43,16 @@ int main() {
     mapbox::supercluster::Supercluster index(features, options);
 
     timer("total supercluster time");
+
+    mapbox::geometry::feature_collection<std::int16_t> tile = index.getTile(0, 0, 0);
+    timer("query zero tile");
+    std::cerr << tile.size() << " features in tile 0-0-0:\n";
+
+    for (auto f : tile) {
+        if (f.properties["cluster"].get<bool>()) {
+            std::cerr << "cluster: " << f.properties["point_count"].get<std::uint64_t>() << "\n";
+        } else {
+            std::cerr << "point\n";
+        }
+    }
 }

@@ -62,22 +62,26 @@ public:
 #endif
 
 struct Options {
-    std::uint16_t minZoom = 0;  // min zoom to generate clusters on
-    std::uint16_t maxZoom = 16; // max zoom level to cluster the points on
+    std::uint8_t minZoom = 0;   // min zoom to generate clusters on
+    std::uint8_t maxZoom = 16;  // max zoom level to cluster the points on
     std::uint16_t radius = 40;  // cluster radius in pixels
     std::uint16_t extent = 512; // tile extent (radius is calculated relative to it)
 };
 
 class Supercluster {
 
-    using FeatureCollection = mapbox::geometry::feature_collection<double>;
-    using Point = mapbox::geometry::point<double>;
+    using GeoJSONPoint = mapbox::geometry::point<double>;
+    using GeoJSONFeatures = mapbox::geometry::feature_collection<double>;
+
+    using TilePoint = mapbox::geometry::point<std::int16_t>;
+    using TileFeature = mapbox::geometry::feature<std::int16_t>;
+    using TileFeatures = mapbox::geometry::feature_collection<std::int16_t>;
 
 public:
-    const FeatureCollection features;
+    const GeoJSONFeatures features;
     const Options options;
 
-    Supercluster(const FeatureCollection &features_, const Options options_ = Options())
+    Supercluster(const GeoJSONFeatures &features_, const Options options_ = Options())
         : features(features_), options(options_) {
 
         std::vector<Cluster> clusters;
@@ -88,7 +92,7 @@ public:
         // generate a cluster object for each point
         std::size_t i = 0;
         for (auto f : features) {
-            const auto &p = f.geometry.get<Point>();
+            const auto &p = f.geometry.get<GeoJSONPoint>();
             Cluster c = { lngX(p.x), latY(p.y), 1, i++ };
             clusters.push_back(c);
         }
@@ -103,6 +107,7 @@ public:
         for (int z = options.maxZoom; z >= options.minZoom; z--) {
             // index input points into a KD-tree
             trees.emplace(z + 1, zoomClusters);
+            clustersByZoom[z + 1] = zoomClusters;
 
             // create a new set of clusters for the zoom
             zoomClusters = clusterZoom(zoomClusters, z);
@@ -113,15 +118,50 @@ public:
 
         // index top-level clusters
         trees.emplace(options.minZoom, zoomClusters);
+        clustersByZoom[options.minZoom] = zoomClusters;
+    }
+
+    TileFeatures getTile(std::uint8_t z, std::uint32_t x, std::uint32_t y) {
+        double const z2 = std::pow(2, z);
+        double const r = options.radius / options.extent;
+
+        std::uint8_t zoom = limitZoom(z);
+
+        std::vector<std::size_t> ids;
+        trees.find(zoom)->second.range((x - r) / z2, (y - r) / z2, (x + 1 + r) / z2,
+                                       (y + 1 + r) / z2, std::back_inserter(ids));
+
+        TileFeatures result;
+
+        for (auto id : ids) {
+            auto const &c = clustersByZoom.find(zoom)->second[id];
+
+            TilePoint point(std::round(options.extent * (c.x * z2 - x)),
+                            std::round(options.extent * (c.y * z2 - y)));
+
+            TileFeature feature{ point };
+
+            if (c.num_points == 1) {
+                feature.properties = features[c.id].properties;
+            } else {
+                feature.properties["cluster"] = true;
+                feature.properties["point_count"] = static_cast<std::uint64_t>(c.num_points);
+            }
+
+            result.push_back(feature);
+        }
+
+        return result;
     }
 
 private:
     std::unordered_map<std::uint8_t, kdbush::KDBush<Cluster>> trees;
+    std::unordered_map<std::uint8_t, std::vector<Cluster>> clustersByZoom;
 
     std::vector<Cluster> clusterZoom(std::vector<Cluster> &points, std::uint8_t zoom) {
         std::vector<Cluster> clusters;
 
-        double r = options.radius / (options.extent * std::pow(2, zoom));
+        double const r = options.radius / (options.extent * std::pow(2, zoom));
 
         for (auto &p : points) {
             // if we've already visited the point at this zoom level, skip it
@@ -160,6 +200,12 @@ private:
         }
 
         return clusters;
+    }
+
+    std::uint8_t limitZoom(std::uint8_t z) {
+        return std::max(
+            static_cast<uint16_t>(options.minZoom),
+            std::min(static_cast<uint16_t>(z), static_cast<uint16_t>(options.maxZoom + 1)));
     }
 
     double lngX(double lng) {
