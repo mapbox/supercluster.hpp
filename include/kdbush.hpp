@@ -50,18 +50,18 @@ public:
         sortKD(0, size - 1, 0);
     }
 
-    template <typename TOutputIter>
+    template <typename TVisitor>
     void range(const TNumber minX,
                const TNumber minY,
                const TNumber maxX,
                const TNumber maxY,
-               TOutputIter out) {
-        range(minX, minY, maxX, maxY, out, 0, ids.size() - 1, 0);
+               const TVisitor &visitor) {
+        range(minX, minY, maxX, maxY, visitor, 0, ids.size() - 1, 0);
     }
 
-    template <typename TOutputIter>
-    void within(const TNumber qx, const TNumber qy, const TNumber r, TOutputIter out) {
-        within(qx, qy, r, out, 0, ids.size() - 1, 0);
+    template <typename TVisitor>
+    void within(const TNumber qx, const TNumber qy, const TNumber r, const TVisitor &visitor) {
+        within(qx, qy, r, visitor, 0, ids.size() - 1, 0);
     }
 
 private:
@@ -69,12 +69,12 @@ private:
     std::vector<std::pair<TNumber, TNumber>> points;
     std::uint8_t nodeSize;
 
-    template <typename TOutputIter>
+    template <typename TVisitor>
     void range(const TNumber minX,
                const TNumber minY,
                const TNumber maxX,
                const TNumber maxY,
-               TOutputIter out,
+               const TVisitor &visitor,
                const TIndex left,
                const TIndex right,
                const std::uint8_t axis) {
@@ -83,7 +83,7 @@ private:
             for (auto i = left; i <= right; i++) {
                 const TNumber x = std::get<0>(points[i]);
                 const TNumber y = std::get<1>(points[i]);
-                if (x >= minX && x <= maxX && y >= minY && y <= maxY) *out++ = ids[i];
+                if (x >= minX && x <= maxX && y >= minY && y <= maxY) visitor(ids[i]);
             }
             return;
         }
@@ -92,20 +92,20 @@ private:
         const TNumber x = std::get<0>(points[m]);
         const TNumber y = std::get<1>(points[m]);
 
-        if (x >= minX && x <= maxX && y >= minY && y <= maxY) *out++ = ids[m];
+        if (x >= minX && x <= maxX && y >= minY && y <= maxY) visitor(ids[m]);
 
         if (axis == 0 ? minX <= x : minY <= y)
-            range(minX, minY, maxX, maxY, out, left, m - 1, (axis + 1) % 2);
+            range(minX, minY, maxX, maxY, visitor, left, m - 1, (axis + 1) % 2);
 
         if (axis == 0 ? maxX >= x : maxY >= y)
-            range(minX, minY, maxX, maxY, out, m + 1, right, (axis + 1) % 2);
+            range(minX, minY, maxX, maxY, visitor, m + 1, right, (axis + 1) % 2);
     }
 
-    template <typename TOutputIter>
+    template <typename TVisitor>
     void within(const TNumber qx,
                 const TNumber qy,
                 const TNumber r,
-                TOutputIter out,
+                const TVisitor &visitor,
                 const TIndex left,
                 const TIndex right,
                 const std::uint8_t axis) {
@@ -116,7 +116,7 @@ private:
             for (auto i = left; i <= right; i++) {
                 const TNumber x = std::get<0>(points[i]);
                 const TNumber y = std::get<1>(points[i]);
-                if (sqDist(x, y, qx, qy) <= r2) *out++ = ids[i];
+                if (sqDist(x, y, qx, qy) <= r2) visitor(ids[i]);
             }
             return;
         }
@@ -125,13 +125,13 @@ private:
         const TNumber x = std::get<0>(points[m]);
         const TNumber y = std::get<1>(points[m]);
 
-        if (sqDist(x, y, qx, qy) <= r2) *out++ = ids[m];
+        if (sqDist(x, y, qx, qy) <= r2) visitor(ids[m]);
 
         if (axis == 0 ? qx - r <= x : qy - r <= y)
-            within(qx, qy, r, out, left, m - 1, (axis + 1) % 2);
+            within(qx, qy, r, visitor, left, m - 1, (axis + 1) % 2);
 
         if (axis == 0 ? qx + r >= x : qy + r >= y)
-            within(qx, qy, r, out, m + 1, right, (axis + 1) % 2);
+            within(qx, qy, r, visitor, m + 1, right, (axis + 1) % 2);
     }
 
     void sortKD(const TIndex left, const TIndex right, const std::uint8_t axis) {

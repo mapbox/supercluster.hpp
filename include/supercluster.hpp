@@ -127,29 +127,30 @@ public:
 
         std::uint8_t zoom = limitZoom(z);
 
-        std::vector<std::size_t> ids;
-        trees.find(zoom)->second.range((x - r) / z2, (y - r) / z2, (x + 1 + r) / z2,
-                                       (y + 1 + r) / z2, std::back_inserter(ids));
-
         TileFeatures result;
 
-        for (auto id : ids) {
-            auto const &c = clustersByZoom.find(zoom)->second[id];
+        auto const &clusters = clustersByZoom.find(zoom)->second;
+        auto const &extent = options.extent;
+        auto const &input_features = features;
 
-            TilePoint point(std::round(options.extent * (c.x * z2 - x)),
-                            std::round(options.extent * (c.y * z2 - y)));
+        trees.find(zoom)->second.range((x - r) / z2, (y - r) / z2, (x + 1 + r) / z2, (y + 1 + r) / z2,
+            [&clusters, &extent, &z2, &x, &y, &result, &input_features](auto &id) {
+            auto const &c = clusters[id];
+
+            TilePoint point(std::round(extent * (c.x * z2 - x)),
+                            std::round(extent * (c.y * z2 - y)));
 
             TileFeature feature{ point };
 
             if (c.num_points == 1) {
-                feature.properties = features[c.id].properties;
+                feature.properties = input_features[c.id].properties;
             } else {
                 feature.properties["cluster"] = true;
                 feature.properties["point_count"] = static_cast<std::uint64_t>(c.num_points);
             }
 
             result.push_back(feature);
-        }
+        });
 
         return result;
     }
@@ -168,30 +169,26 @@ private:
             if (p.zoom <= zoom) continue;
             p.zoom = zoom;
 
-            // find all nearby points
-            std::vector<std::size_t> neighborIds;
-            trees.find(zoom + 1)->second.within(p.x, p.y, r, std::back_inserter(neighborIds));
-
-            bool foundNeighbors = false;
             auto num_points = p.num_points;
             double wx = p.x * num_points;
             double wy = p.y * num_points;
 
-            for (auto id : neighborIds) {
-                auto &b = points[id];
-                // filter out neighbors that are too far or already processed
-                if (zoom < b.zoom) {
-                    foundNeighbors = true;
-                    // save the zoom (so it doesn't get processed twice)
-                    b.zoom = zoom;
-                    // accumulate coordinates for calculating weighted center
-                    wx += b.x * b.num_points;
-                    wy += b.y * b.num_points;
-                    num_points += b.num_points;
-                }
-            }
+            // find all nearby points
+            trees.find(zoom + 1)->second.within(
+                p.x, p.y, r, [&points, &wx, &wy, &num_points, &zoom](const auto &id) {
+                    auto &b = points[id];
+                    // filter out neighbors that are too far or already processed
+                    if (zoom < b.zoom) {
+                        // save the zoom (so it doesn't get processed twice)
+                        b.zoom = zoom;
+                        // accumulate coordinates for calculating weighted center
+                        wx += b.x * b.num_points;
+                        wy += b.y * b.num_points;
+                        num_points += b.num_points;
+                    }
+                });
 
-            if (foundNeighbors) {
+            if (num_points != p.num_points) { // found neighbors
                 Cluster c = { wx / num_points, wy / num_points, num_points };
                 clusters.push_back(c);
             } else {
