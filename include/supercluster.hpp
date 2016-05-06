@@ -135,7 +135,7 @@ public:
 
         trees.find(zoom)->second.range(
             (x - r) / z2, (y - r) / z2, (x + 1 + r) / z2, (y + 1 + r) / z2,
-            [&clusters, &extent, &z2, &x, &y, &result, &input_features](auto &id) {
+            [&](const auto &id) {
                 auto const &c = clusters[id];
 
                 TilePoint point(std::round(extent * (c.x * z2 - x)),
@@ -176,7 +176,7 @@ private:
 
             // find all nearby points
             trees.find(zoom + 1)->second.within(
-                p.x, p.y, r, [&points, &wx, &wy, &num_points, &zoom](const auto &id) {
+                p.x, p.y, r, [&](const auto &id) {
                     auto &b = points[id];
                     // filter out neighbors that are too far or already processed
                     if (zoom < b.zoom) {
