@@ -11,19 +11,44 @@
 namespace mapbox {
 namespace supercluster {
 
-struct Options {
-    std::uint8_t minZoom = 0;   // min zoom to generate clusters on
-    std::uint8_t maxZoom = 16;  // max zoom level to cluster the points on
-    std::uint16_t radius = 40;  // cluster radius in pixels
-    std::uint16_t extent = 512; // tile extent (radius is calculated relative to it)
-};
-
 struct Cluster {
     double x;
     double y;
     std::uint32_t num_points;
     std::size_t id;
-    std::uint8_t z;
+    std::uint8_t zoom = 255;
+};
+
+} // namespace supercluster
+} // namespace mapbox
+
+namespace kdbush {
+
+using Cluster = mapbox::supercluster::Cluster;
+
+template <>
+struct nth<0, Cluster> {
+    inline static double get(const Cluster &c) {
+        return c.x;
+    };
+};
+template <>
+struct nth<1, Cluster> {
+    inline static double get(const Cluster &c) {
+        return c.y;
+    };
+};
+
+} // namespace kdbush
+
+namespace mapbox {
+namespace supercluster {
+
+struct Options {
+    std::uint8_t minZoom = 0;   // min zoom to generate clusters on
+    std::uint8_t maxZoom = 16;  // max zoom level to cluster the points on
+    std::uint16_t radius = 40;  // cluster radius in pixels
+    std::uint16_t extent = 512; // tile extent (radius is calculated relative to it)
 };
 
 class Supercluster {
@@ -41,20 +66,21 @@ public:
         std::size_t i = 0;
         for (auto f : features) {
             const auto &p = f.geometry.get<Point>();
-            Cluster c = { lngX(p.x), latY(p.y), 1, i++, 255 };
+            Cluster c = { lngX(p.x), latY(p.y), 1, i++ };
             clusters.push_back(c);
         }
 
-        trees.reserve(options.maxZoom + 1);
+        trees.emplace(options.maxZoom + 1, clusters);
 
-        trees.emplace_back(clusters);
+        std::vector<std::size_t> ids;
+        trees[options.maxZoom + 1].within(0, 0, 0, std::back_inserter(ids));
     }
 
     const FeatureCollection features;
     const Options options;
 
 private:
-    std::vector<kdbush::KDBush<Cluster>> trees;
+    std::unordered_map<std::uint8_t, kdbush::KDBush<Cluster>> trees;
 
     double lngX(double lng) {
         return lng / 360 + 0.5;
@@ -69,16 +95,3 @@ private:
 
 } // namespace supercluster
 } // namespace mapbox
-
-template <>
-struct kdbush::nth<0, mapbox::supercluster::Cluster> {
-    inline static double get(const mapbox::supercluster::Cluster &c) {
-        return c.x;
-    };
-};
-template <>
-struct kdbush::nth<1, mapbox::supercluster::Cluster> {
-    inline static double get(const mapbox::supercluster::Cluster &c) {
-        return c.y;
-    };
-};
