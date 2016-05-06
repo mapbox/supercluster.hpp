@@ -35,9 +35,10 @@ int main() {
     d.ParseStream(is);
     timer("parse JSON");
 
-    mapbox::geometry::feature_collection<double> features;
-
     const auto &json_features = d["features"];
+
+    mapbox::geometry::feature_collection<double> features;
+    features.reserve(json_features.Size());
 
     for (auto itr = json_features.Begin(); itr != json_features.End(); ++itr) {
         const auto &json_coords = (*itr)["geometry"]["coordinates"];

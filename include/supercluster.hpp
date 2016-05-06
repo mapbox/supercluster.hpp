@@ -28,16 +28,19 @@ struct Cluster {
 
 class Supercluster {
 
+    using FeatureCollection = mapbox::geometry::feature_collection<double>;
+    using Point = mapbox::geometry::point<double>;
+
 public:
-    Supercluster(const mapbox::geometry::feature_collection<double> &features_,
-                 Options options_ = Options())
+    Supercluster(const FeatureCollection &features_, Options options_ = Options())
         : features(features_), options(options_) {
 
         std::vector<Cluster> clusters;
 
+        // generate a cluster object for each point
         std::size_t i = 0;
         for (auto f : features) {
-            const auto &p = f.geometry.get<mapbox::geometry::point<double>>();
+            const auto &p = f.geometry.get<Point>();
             Cluster c = { lngX(p.x), latY(p.y), 1, i++, 255 };
             clusters.push_back(c);
         }
@@ -47,7 +50,7 @@ public:
         trees.emplace_back(clusters);
     }
 
-    const mapbox::geometry::feature_collection<double> features;
+    const FeatureCollection features;
     const Options options;
 
 private:
