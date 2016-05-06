@@ -130,20 +130,19 @@ public:
         TileFeatures result;
 
         auto const &clusters = clustersByZoom.find(zoom)->second;
-        auto const &extent = options.extent;
-        auto const &input_features = features;
 
         trees.find(zoom)->second.range(
-            (x - r) / z2, (y - r) / z2, (x + 1 + r) / z2, (y + 1 + r) / z2, [&](const auto &id) {
+            (x - r) / z2, (y - r) / z2, (x + 1 + r) / z2, (y + 1 + r) / z2,
+            [&, this](const auto &id) {
                 auto const &c = clusters[id];
 
-                TilePoint point(std::round(extent * (c.x * z2 - x)),
-                                std::round(extent * (c.y * z2 - y)));
+                TilePoint point(std::round(this->options.extent * (c.x * z2 - x)),
+                                std::round(this->options.extent * (c.y * z2 - y)));
 
                 TileFeature feature{ point };
 
                 if (c.num_points == 1) {
-                    feature.properties = input_features[c.id].properties;
+                    feature.properties = this->features[c.id].properties;
                 } else {
                     feature.properties["cluster"] = true;
                     feature.properties["point_count"] = static_cast<std::uint64_t>(c.num_points);
