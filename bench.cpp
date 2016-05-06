@@ -2,6 +2,8 @@
 #include <rapidjson/document.h>
 #include <rapidjson/filereadstream.h>
 
+#define DEBUG_TIMER true
+
 #include <supercluster.hpp>
 
 #include <cassert>
@@ -10,26 +12,12 @@
 #include <iostream>
 #include <vector>
 
-class Timer {
-public:
-    std::chrono::high_resolution_clock::time_point started;
-    Timer() {
-        started = std::chrono::high_resolution_clock::now();
-    }
-    void operator()(std::string msg) {
-        const auto now = std::chrono::high_resolution_clock::now();
-        const auto ms = std::chrono::duration_cast<std::chrono::microseconds>(now - started);
-        std::cerr << msg << ": " << double(ms.count()) / 1000 << "ms\n";
-        started = now;
-    }
-};
-
 int main() {
     std::FILE *fp = std::fopen("../supercluster/tmp/trees-na2.json", "r");
     char buffer[65536];
     rapidjson::FileReadStream is(fp, buffer, sizeof(buffer));
 
-    Timer timer;
+    mapbox::supercluster::Timer timer;
 
     rapidjson::Document d;
     d.ParseStream(is);
@@ -50,7 +38,9 @@ int main() {
     }
     timer("convert to geometry.hpp");
 
-    mapbox::supercluster::Supercluster index(features);
+    mapbox::supercluster::Options options;
+    options.radius = 75;
+    mapbox::supercluster::Supercluster index(features, options);
 
-    timer("construct supercluster");
+    timer("total supercluster time");
 }

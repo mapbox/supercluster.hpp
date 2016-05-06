@@ -45,6 +45,22 @@ struct nth<1, Cluster> {
 namespace mapbox {
 namespace supercluster {
 
+#ifdef DEBUG_TIMER
+class Timer {
+public:
+    std::chrono::high_resolution_clock::time_point started;
+    Timer() {
+        started = std::chrono::high_resolution_clock::now();
+    }
+    void operator()(std::string msg) {
+        const auto now = std::chrono::high_resolution_clock::now();
+        const auto ms = std::chrono::duration_cast<std::chrono::microseconds>(now - started);
+        std::cerr << msg << ": " << double(ms.count()) / 1000 << "ms\n";
+        started = now;
+    }
+};
+#endif
+
 struct Options {
     std::uint16_t minZoom = 0;  // min zoom to generate clusters on
     std::uint16_t maxZoom = 16; // max zoom level to cluster the points on
@@ -66,6 +82,9 @@ public:
 
         std::vector<Cluster> clusters;
 
+#ifdef DEBUG_TIMER
+        Timer timer;
+#endif
         // generate a cluster object for each point
         std::size_t i = 0;
         for (auto f : features) {
@@ -73,6 +92,9 @@ public:
             Cluster c = { lngX(p.x), latY(p.y), 1, i++ };
             clusters.push_back(c);
         }
+#ifdef DEBUG_TIMER
+        timer("generate single point clusters");
+#endif
 
         // cluster points on max zoom, then cluster the results on previous zoom, etc.;
         // results in a cluster hierarchy across zoom levels
@@ -84,6 +106,9 @@ public:
 
             // create a new set of clusters for the zoom
             zoomClusters = clusterZoom(zoomClusters, z);
+#ifdef DEBUG_TIMER
+            timer(std::to_string(zoomClusters.size()) + " clusters");
+#endif
         }
 
         // index top-level clusters
@@ -133,8 +158,6 @@ private:
                 clusters.push_back(p);
             }
         }
-
-        std::cerr << "z" << int(zoom) << ", num clusters: " << clusters.size() << "\n";
 
         return clusters;
     }
