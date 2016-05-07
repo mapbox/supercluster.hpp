@@ -5,9 +5,10 @@ export MASON = $(MASON_DIR)/mason
 
 VARIANT = variant 1.1.0
 GEOMETRY = geometry 0.3.0
+KDBUSH = kdbush 0.1.0
 RAPIDJSON = rapidjson 1.0.2
 
-GEOMETRY_DEP = `$(MASON) cflags $(VARIANT)` `$(MASON) cflags $(GEOMETRY)`
+DEPS = `$(MASON) cflags $(VARIANT)` `$(MASON) cflags $(GEOMETRY)` `$(MASON) cflags $(KDBUSH)`
 RAPIDJSON_DEP = `$(MASON) cflags $(RAPIDJSON)`
 
 default:
@@ -19,11 +20,12 @@ $(MASON_DIR):
 mason_packages: $(MASON_DIR)
 	$(MASON) install $(VARIANT)
 	$(MASON) install $(GEOMETRY)
+	$(MASON) install $(KDBUSH)
 	$(MASON) install $(RAPIDJSON)
 
 build/bench: bench.cpp include/* mason_packages Makefile
 	mkdir -p build
-	$(CXX) bench.cpp $(CFLAGS) $(GEOMETRY_DEP) $(RAPIDJSON_DEP) -o build/bench
+	$(CXX) bench.cpp $(CFLAGS) $(DEPS) $(RAPIDJSON_DEP) -o build/bench
 
 run-bench: build/bench
 	./build/bench
