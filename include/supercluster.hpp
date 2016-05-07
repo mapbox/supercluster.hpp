@@ -181,9 +181,9 @@ private:
     std::unordered_map<std::uint8_t, Zoom> zooms;
 
     std::uint8_t limitZoom(std::uint8_t z) {
-        return std::max(
-            static_cast<uint16_t>(options.minZoom),
-            std::min(static_cast<uint16_t>(z), static_cast<uint16_t>(options.maxZoom + 1)));
+        if (z < options.minZoom) return options.minZoom;
+        if (z > options.maxZoom + 1) return options.maxZoom + 1;
+        return z;
     }
 
     static double lngX(double lng) {
