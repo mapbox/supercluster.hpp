@@ -17,7 +17,7 @@ struct Cluster {
     double y;
     std::uint32_t num_points;
     std::size_t id = 0;
-    std::uint8_t zoom = 255;
+    bool visited = false;
 };
 
 } // namespace supercluster
@@ -93,8 +93,7 @@ public:
         std::size_t i = 0;
         for (const auto &f : features) {
             const auto &p = f.geometry.get<GeoJSONPoint>();
-            Cluster c = { lngX(p.x), latY(p.y), 1, i++ };
-            clusters.push_back(c);
+            clusters.push_back({ lngX(p.x), latY(p.y), 1, i++ });
         }
 #ifdef DEBUG_TIMER
         timer("generate single point clusters");
@@ -164,9 +163,8 @@ private:
         double const r = options.radius / (options.extent * std::pow(2, zoom));
 
         for (auto &p : points) {
-            // if we've already visited the point at this zoom level, skip it
-            if (p.zoom <= zoom) continue;
-            p.zoom = zoom;
+            if (p.visited) continue;
+            p.visited = true;
 
             auto num_points = p.num_points;
             double wx = p.x * num_points;
@@ -175,23 +173,18 @@ private:
             // find all nearby points
             trees.find(zoom + 1)->second.within(p.x, p.y, r, [&](const auto &id) {
                 auto &b = points[id];
-                // filter out neighbors that are too far or already processed
-                if (zoom < b.zoom) {
-                    // save the zoom (so it doesn't get processed twice)
-                    b.zoom = zoom;
-                    // accumulate coordinates for calculating weighted center
-                    wx += b.x * b.num_points;
-                    wy += b.y * b.num_points;
-                    num_points += b.num_points;
-                }
+
+                // skip neighbors that are already processed
+                if (b.visited) return;
+                b.visited = true;
+
+                // accumulate coordinates for calculating weighted center
+                wx += b.x * b.num_points;
+                wy += b.y * b.num_points;
+                num_points += b.num_points;
             });
 
-            if (num_points != p.num_points) { // found neighbors
-                Cluster c = { wx / num_points, wy / num_points, num_points };
-                clusters.push_back(c);
-            } else {
-                clusters.push_back(p);
-            }
+            clusters.push_back({ wx / num_points, wy / num_points, num_points });
         }
 
         return clusters;
