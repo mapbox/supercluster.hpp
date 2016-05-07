@@ -16,7 +16,7 @@ struct Cluster {
     double x;
     double y;
     std::uint32_t num_points;
-    std::size_t id = 0;
+    std::uint32_t id = 0;
     bool visited = false;
 };
 
@@ -87,18 +87,15 @@ public:
 #ifdef DEBUG_TIMER
         Timer timer;
 #endif
-
-        zooms.emplace(options.maxZoom + 1, features);
-
+        for (int z = options.maxZoom + 1; z >= options.minZoom; z--) {
+            if (z == options.maxZoom + 1) {
+                zooms.emplace(options.maxZoom + 1, features);
+            } else {
+                const auto r = options.radius / (options.extent * std::pow(2, z));
+                zooms.emplace(z, Zoom(zooms.find(z + 1)->second, r));
+            }
 #ifdef DEBUG_TIMER
-        timer("generate single point clusters");
-#endif
-
-        for (int z = options.maxZoom; z >= options.minZoom; z--) {
-            zooms.emplace(z, zooms[z + 1], options.radius / (options.extent * std::pow(2, z)));
-
-#ifdef DEBUG_TIMER
-            timer(std::to_string(zooms[z].clusters.size()) + " clusters");
+            timer(std::to_string(zooms.find(z)->second.clusters.size()) + " clusters");
 #endif
         }
     }
@@ -107,55 +104,52 @@ public:
         double const z2 = std::pow(2, z);
         double const r = options.radius / options.extent;
 
-        std::uint8_t zoom = limitZoom(z);
-
         TileFeatures result;
 
-        auto const &clusters = clustersByZoom.find(zoom)->second;
+        auto &zoom = zooms.find(limitZoom(z))->second;
 
-        trees.find(zoom)->second.range(
-            (x - r) / z2, (y - r) / z2, (x + 1 + r) / z2, (y + 1 + r) / z2,
-            [&, this](const auto &id) {
-                auto const &c = clusters[id];
+        auto visitor = [&, this](const auto &id) {
+            auto const &c = zoom.clusters[id];
 
-                TilePoint point(std::round(this->options.extent * (c.x * z2 - x)),
-                                std::round(this->options.extent * (c.y * z2 - y)));
+            TilePoint point(std::round(this->options.extent * (c.x * z2 - x)),
+                            std::round(this->options.extent * (c.y * z2 - y)));
 
-                TileFeature feature{ point };
+            TileFeature feature{ point };
 
-                if (c.num_points == 1) {
-                    feature.properties = this->features[c.id].properties;
-                } else {
-                    feature.properties["cluster"] = true;
-                    feature.properties["point_count"] = static_cast<std::uint64_t>(c.num_points);
-                }
+            if (c.num_points == 1) {
+                feature.properties = this->features[c.id].properties;
+            } else {
+                feature.properties["cluster"] = true;
+                feature.properties["point_count"] = static_cast<std::uint64_t>(c.num_points);
+            }
 
-                result.push_back(feature);
-            });
+            result.push_back(feature);
+        };
+
+        zoom.tree.range((x - r) / z2, (y - r) / z2, (x + 1 + r) / z2, (y + 1 + r) / z2, visitor);
 
         return result;
     }
 
 private:
     struct Zoom {
-        kdbush::KDBush<Cluster> bush;
+        kdbush::KDBush<Cluster, std::uint32_t> tree;
         std::vector<Cluster> clusters;
 
         Zoom(const GeoJSONFeatures &features) {
             // generate a cluster object for each point
-            std::size_t i = 0;
+            std::uint32_t i = 0;
 
             for (const auto &f : features) {
                 const auto &p = f.geometry.get<GeoJSONPoint>();
                 clusters.push_back({ lngX(p.x), latY(p.y), 1, i++ });
             }
 
-            bush.fill(clusters);
+            tree.fill(clusters);
         }
 
-        Zoom(Zoom& previous, double r) {
+        Zoom(Zoom &previous, double r) {
             for (auto &p : previous.clusters) {
-                // if we've already visited the point at this zoom level, skip it
                 if (p.visited) continue;
                 p.visited = true;
 
@@ -164,7 +158,7 @@ private:
                 double wy = p.y * num_points;
 
                 // find all nearby points
-                previous.bush.within(p.x, p.y, r, [&](const auto &id) {
+                previous.tree.within(p.x, p.y, r, [&](const auto &id) {
                     auto &b = previous.clusters[id];
 
                     // filter out neighbors that are already processed
@@ -177,14 +171,10 @@ private:
                     num_points += b.num_points;
                 });
 
-                if (num_points != p.num_points) { // found neighbors
-                    clusters.push_back({ wx / num_points, wy / num_points, num_points });
-                } else {
-                    clusters.push_back(p);
-                }
+                clusters.push_back({ wx / num_points, wy / num_points, num_points, p.id });
             }
 
-            bush.fill(clusters);
+            tree.fill(clusters);
         }
     };
 
@@ -196,11 +186,11 @@ private:
             std::min(static_cast<uint16_t>(z), static_cast<uint16_t>(options.maxZoom + 1)));
     }
 
-    double lngX(double lng) {
+    static double lngX(double lng) {
         return lng / 360 + 0.5;
     }
 
-    double latY(double lat) {
+    static double latY(double lat) {
         const double sine = std::sin(lat * M_PI / 180);
         const double y = 0.5 - 0.25 * std::log((1 + sine) / (1 - sine)) / M_PI;
         return std::min(std::max(y, 0.0), 1.0);

@@ -26,6 +26,9 @@ public:
 
     static const std::uint8_t defaultNodeSize = 64;
 
+    KDBush(const std::uint8_t nodeSize_ = defaultNodeSize) : nodeSize(nodeSize_) {
+    }
+
     KDBush(const std::vector<TPoint> &points_, const std::uint8_t nodeSize_ = defaultNodeSize)
         : KDBush(std::begin(points_), std::end(points_), nodeSize_) {
     }
@@ -35,7 +38,16 @@ public:
            const TPointIter &points_end,
            const std::uint8_t nodeSize_ = defaultNodeSize)
         : nodeSize(nodeSize_) {
+        fill(points_begin, points_end);
+    }
 
+    void fill(const std::vector<TPoint> &points_) {
+        fill(std::begin(points_), std::end(points_));
+    }
+
+    template <typename TPointIter>
+    void fill(const TPointIter &points_begin, const TPointIter &points_end) {
+        assert(points.empty());
         const TIndex size = std::distance(points_begin, points_end);
 
         points.reserve(size);
