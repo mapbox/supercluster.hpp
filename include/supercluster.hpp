@@ -87,15 +87,17 @@ public:
 #ifdef DEBUG_TIMER
         Timer timer;
 #endif
-        for (int z = options.maxZoom + 1; z >= options.minZoom; z--) {
-            if (z == options.maxZoom + 1) {
-                zooms.emplace(options.maxZoom + 1, features);
-            } else {
-                const auto r = options.radius / (options.extent * std::pow(2, z));
-                zooms.emplace(z, Zoom(zooms.find(z + 1)->second, r));
-            }
+        // convert and index initial points
+        zooms.emplace(options.maxZoom + 1, features);
 #ifdef DEBUG_TIMER
-            timer(std::to_string(zooms.find(z)->second.clusters.size()) + " clusters");
+        timer(std::to_string(features.size()) + " initial points");
+#endif
+        for (int z = options.maxZoom; z >= options.minZoom; z--) {
+            // cluster points from the previous zoom level
+            const double r = options.radius / (options.extent * std::pow(2, z));
+            zooms.emplace(z, Zoom(zooms[z + 1], r));
+#ifdef DEBUG_TIMER
+            timer(std::to_string(zooms[z].clusters.size()) + " clusters");
 #endif
         }
     }
@@ -103,17 +105,14 @@ public:
     TileFeatures getTile(std::uint8_t z, std::uint32_t x, std::uint32_t y) {
         double const z2 = std::pow(2, z);
         double const r = options.radius / options.extent;
-
+        auto &zoom = zooms[limitZoom(z)];
         TileFeatures result;
-
-        auto &zoom = zooms.find(limitZoom(z))->second;
 
         auto visitor = [&, this](const auto &id) {
             auto const &c = zoom.clusters[id];
 
             TilePoint point(std::round(this->options.extent * (c.x * z2 - x)),
                             std::round(this->options.extent * (c.y * z2 - y)));
-
             TileFeature feature{ point };
 
             if (c.num_points == 1) {
@@ -125,7 +124,6 @@ public:
 
             result.push_back(feature);
         };
-
         zoom.tree.range((x - r) / z2, (y - r) / z2, (x + 1 + r) / z2, (y + 1 + r) / z2, visitor);
 
         return result;
@@ -135,6 +133,8 @@ private:
     struct Zoom {
         kdbush::KDBush<Cluster, std::uint32_t> tree;
         std::vector<Cluster> clusters;
+
+        Zoom() = default;
 
         Zoom(const GeoJSONFeatures &features) {
             // generate a cluster object for each point
