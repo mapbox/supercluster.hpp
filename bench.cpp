@@ -7,7 +7,6 @@
 #include <supercluster.hpp>
 
 #include <cassert>
-#include <chrono>
 #include <cstdio>
 #include <iostream>
 #include <vector>
