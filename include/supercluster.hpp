@@ -2,6 +2,7 @@
 
 #include <kdbush.hpp>
 #include <mapbox/geometry/feature.hpp>
+#include <mapbox/geometry/point_arithmetic.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -15,9 +16,10 @@
 namespace mapbox {
 namespace supercluster {
 
+using namespace mapbox::geometry;
+
 struct Cluster {
-    double x;
-    double y;
+    point<double> pos;
     std::uint32_t num_points;
     std::uint32_t id = 0;
     bool visited = false;
@@ -33,13 +35,13 @@ using Cluster = mapbox::supercluster::Cluster;
 template <>
 struct nth<0, Cluster> {
     inline static double get(const Cluster &c) {
-        return c.x;
+        return c.pos.x;
     };
 };
 template <>
 struct nth<1, Cluster> {
     inline static double get(const Cluster &c) {
-        return c.y;
+        return c.pos.y;
     };
 };
 
@@ -72,13 +74,12 @@ struct Options {
 };
 
 class Supercluster {
+    using GeoJSONPoint = point<double>;
+    using GeoJSONFeatures = feature_collection<double>;
 
-    using GeoJSONPoint = mapbox::geometry::point<double>;
-    using GeoJSONFeatures = mapbox::geometry::feature_collection<double>;
-
-    using TilePoint = mapbox::geometry::point<std::int16_t>;
-    using TileFeature = mapbox::geometry::feature<std::int16_t>;
-    using TileFeatures = mapbox::geometry::feature_collection<std::int16_t>;
+    using TilePoint = point<std::int16_t>;
+    using TileFeature = feature<std::int16_t>;
+    using TileFeatures = feature_collection<std::int16_t>;
 
 public:
     const GeoJSONFeatures features;
@@ -114,8 +115,8 @@ public:
         auto visitor = [&, this](const auto &id) {
             auto const &c = zoom.clusters[id];
 
-            TilePoint point(std::round(this->options.extent * (c.x * z2 - x)),
-                            std::round(this->options.extent * (c.y * z2 - y)));
+            TilePoint point(std::round(this->options.extent * (c.pos.x * z2 - x)),
+                            std::round(this->options.extent * (c.pos.y * z2 - y)));
             TileFeature feature{ point };
 
             if (c.num_points == 1) {
@@ -144,8 +145,7 @@ private:
             std::uint32_t i = 0;
 
             for (const auto &f : features) {
-                const auto &p = f.geometry.get<GeoJSONPoint>();
-                clusters.push_back({ lngX(p.x), latY(p.y), 1, i++ });
+                clusters.push_back({ project(f.geometry.get<GeoJSONPoint>()), 1, i++ });
             }
 
             tree.fill(clusters);
@@ -157,11 +157,10 @@ private:
                 p.visited = true;
 
                 auto num_points = p.num_points;
-                double wx = p.x * num_points;
-                double wy = p.y * num_points;
+                point<double> weight = p.pos * double(num_points);
 
                 // find all nearby points
-                previous.tree.within(p.x, p.y, r, [&](const auto &id) {
+                previous.tree.within(p.pos.x, p.pos.y, r, [&](const auto &id) {
                     auto &b = previous.clusters[id];
 
                     // filter out neighbors that are already processed
@@ -169,12 +168,11 @@ private:
                     b.visited = true;
 
                     // accumulate coordinates for calculating weighted center
-                    wx += b.x * b.num_points;
-                    wy += b.y * b.num_points;
+                    weight += b.pos * double(b.num_points);
                     num_points += b.num_points;
                 });
 
-                clusters.push_back({ wx / num_points, wy / num_points, num_points, p.id });
+                clusters.push_back({ weight / double(num_points), num_points, p.id });
             }
 
             tree.fill(clusters);
@@ -189,14 +187,12 @@ private:
         return z;
     }
 
-    static double lngX(double lng) {
-        return lng / 360 + 0.5;
-    }
-
-    static double latY(double lat) {
-        const double sine = std::sin(lat * M_PI / 180);
+    static point<double> project(const GeoJSONPoint &p) {
+        auto lngX = p.x / 360 + 0.5;
+        const double sine = std::sin(p.y * M_PI / 180);
         const double y = 0.5 - 0.25 * std::log((1 + sine) / (1 - sine)) / M_PI;
-        return std::min(std::max(y, 0.0), 1.0);
+        auto latY = std::min(std::max(y, 0.0), 1.0);
+        return { lngX, latY };
     }
 };
 
