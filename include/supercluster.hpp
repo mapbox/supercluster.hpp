@@ -6,12 +6,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <vector>
+
 #ifdef DEBUG_TIMER
 #include <chrono>
-#endif
-#include <cstdint>
 #include <iostream>
-#include <vector>
+#endif
 
 namespace mapbox {
 namespace supercluster {
