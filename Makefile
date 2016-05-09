@@ -12,7 +12,7 @@ DEPS = `$(MASON) cflags $(VARIANT)` `$(MASON) cflags $(GEOMETRY)` `$(MASON) cfla
 RAPIDJSON_DEP = `$(MASON) cflags $(RAPIDJSON)`
 
 default:
-	make run-bench
+	make run-test
 
 $(MASON_DIR):
 	git submodule update --init $(MASON_DIR)
@@ -27,11 +27,18 @@ build/bench: bench.cpp include/* mason_packages Makefile
 	mkdir -p build
 	$(CXX) bench.cpp $(CFLAGS) $(DEPS) $(RAPIDJSON_DEP) -o build/bench
 
+build/test: test/test.cpp include/* mason_packages Makefile
+	mkdir -p build
+	$(CXX) test/test.cpp $(CFLAGS) $(DEPS) $(RAPIDJSON_DEP) -o build/test
+
 run-bench: build/bench
 	./build/bench
 
+run-test: build/test
+	./build/test
+
 format:
-	clang-format include/*.hpp *.cpp -i
+	clang-format include/*.hpp *.cpp test/*.cpp -i
 
 clean:
 	rm -rf build
