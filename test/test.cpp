@@ -39,7 +39,8 @@ int main() {
     std::uint64_t num_points = 0;
 
     for (auto &f : tile) {
-        if (f.properties["cluster"].get<bool>()) {
+        const auto itr = f.properties.find("cluster");
+        if (itr != f.properties.end() && itr->second.get<bool>()) {
             num_points += f.properties["point_count"].get<std::uint64_t>();
         } else {
             num_points += 1;
