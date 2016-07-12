@@ -154,7 +154,8 @@ private:
 
         Zoom(Zoom &previous, double r) {
             for (auto &p : previous.clusters) {
-                if (p.visited) continue;
+                if (p.visited)
+                    continue;
                 p.visited = true;
 
                 auto num_points = p.num_points;
@@ -165,7 +166,8 @@ private:
                     auto &b = previous.clusters[id];
 
                     // filter out neighbors that are already processed
-                    if (b.visited) return;
+                    if (b.visited)
+                        return;
                     b.visited = true;
 
                     // accumulate coordinates for calculating weighted center
@@ -183,8 +185,10 @@ private:
     std::unordered_map<std::uint8_t, Zoom> zooms;
 
     std::uint8_t limitZoom(std::uint8_t z) {
-        if (z < options.minZoom) return options.minZoom;
-        if (z > options.maxZoom + 1) return options.maxZoom + 1;
+        if (z < options.minZoom)
+            return options.minZoom;
+        if (z > options.maxZoom + 1)
+            return options.maxZoom + 1;
         return z;
     }
 
