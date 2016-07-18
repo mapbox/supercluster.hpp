@@ -141,11 +141,11 @@ private:
 
         Zoom() = default;
 
-        Zoom(const GeoJSONFeatures &features) {
+        Zoom(const GeoJSONFeatures &features_) {
             // generate a cluster object for each point
             std::uint32_t i = 0;
 
-            for (const auto &f : features) {
+            for (const auto &f : features_) {
                 clusters.push_back({ project(f.geometry.get<GeoJSONPoint>()), 1, i++ });
             }
 
