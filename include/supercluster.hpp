@@ -107,11 +107,13 @@ public:
         }
     }
 
-    TileFeatures getTile(std::uint8_t z, std::uint32_t x, std::uint32_t y) {
-        double const z2 = std::pow(2, z);
-        double const r = options.radius / options.extent;
-        auto &zoom = zooms[limitZoom(z)];
+    TileFeatures getTile(std::uint8_t z, std::uint32_t x_, std::uint32_t y) {
         TileFeatures result;
+        auto &zoom = zooms[limitZoom(z)];
+
+        std::uint32_t z2 = std::pow(2, z);
+        double const r = static_cast<double>(options.radius) / options.extent;
+        std::int32_t x = static_cast<std::int32_t>(x_);
 
         auto visitor = [&, this](const auto &id) {
             auto const &c = zoom.clusters[id];
@@ -129,7 +131,20 @@ public:
 
             result.push_back(feature);
         };
-        zoom.tree.range((x - r) / z2, (y - r) / z2, (x + 1 + r) / z2, (y + 1 + r) / z2, visitor);
+
+        double const top = (y - r) / z2;
+        double const bottom = (y + 1 + r) / z2;
+
+        zoom.tree.range((x - r) / z2, top, (x + 1 + r) / z2, bottom, visitor);
+
+        if (x_ == 0) {
+            x = z2;
+            zoom.tree.range(1 - r / z2, top, 1, bottom, visitor);
+        }
+        if (x_ == z2 - 1) {
+            x = -1;
+            zoom.tree.range(0, top, r / z2, bottom, visitor);
+        }
 
         return result;
     }

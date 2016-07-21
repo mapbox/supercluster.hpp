@@ -31,10 +31,11 @@ int main() {
         features.push_back(feature);
     }
 
-    mapbox::supercluster::Supercluster index(features);
+    mapbox::supercluster::Options options;
+    mapbox::supercluster::Supercluster index(features, options);
 
     mapbox::geometry::feature_collection<std::int16_t> tile = index.getTile(0, 0, 0);
-    assert(tile.size() == 32);
+    assert(tile.size() == 39);
 
     std::uint64_t num_points = 0;
 
@@ -47,5 +48,5 @@ int main() {
         }
     }
 
-    assert(num_points == 162);
+    assert(num_points == 196);
 }
