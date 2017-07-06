@@ -4,7 +4,7 @@ export MASON_DIR = $(shell pwd)/.mason
 export MASON = $(MASON_DIR)/mason
 
 VARIANT = variant 1.1.0
-GEOMETRY = geometry 0.8.0
+GEOMETRY = geometry 0.9.2
 KDBUSH = kdbush 0.1.0
 RAPIDJSON = rapidjson 1.0.2
 

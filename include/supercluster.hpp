@@ -24,6 +24,15 @@ struct Cluster {
     std::uint32_t num_points;
     std::uint32_t id = 0;
     bool visited = false;
+
+    Cluster(point<double> pos_,
+            std::uint32_t num_points_,
+            std::uint32_t id_ = 0,
+            bool visited_ = false)
+        : pos(std::move(pos_)),
+          num_points(num_points_),
+          id(id_),
+          visited(visited_) {}
 };
 
 } // namespace supercluster
