@@ -1,7 +1,7 @@
 #pragma once
 
 #include <kdbush.hpp>
-#include <mapbox/geometry/feature.hpp>
+#include <mapbox/feature.hpp>
 #include <mapbox/geometry/point_arithmetic.hpp>
 
 #include <algorithm>
@@ -18,6 +18,7 @@ namespace mapbox {
 namespace supercluster {
 
 using namespace mapbox::geometry;
+using namespace mapbox::feature;
 
 struct Cluster {
     point<double> pos;
