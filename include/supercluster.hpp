@@ -29,10 +29,8 @@ struct Cluster {
             std::uint32_t num_points_,
             std::uint32_t id_ = 0,
             bool visited_ = false)
-        : pos(std::move(pos_)),
-          num_points(num_points_),
-          id(id_),
-          visited(visited_) {}
+        : pos(std::move(pos_)), num_points(num_points_), id(id_), visited(visited_) {
+    }
 };
 
 } // namespace supercluster
@@ -199,7 +197,11 @@ private:
                     num_points += b.num_points;
                 });
 
-                clusters.push_back({ weight / double(num_points), num_points, p.id });
+                if (num_points == 1) {
+                    clusters.push_back(p);
+                } else {
+                    clusters.emplace_back(weight / double(num_points), num_points, p.id);
+                }
             }
 
             tree.fill(clusters);
