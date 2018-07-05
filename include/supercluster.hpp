@@ -33,7 +33,9 @@ struct Cluster {
     }
 
     feature<double> toGeoJSON() const {
-        point<double> p{pos.x, pos.y}; // TODO unproject
+        const double x = (pos.x - 0.5) * 360.0;
+        const double y = 360.0 * std::atan(std::exp((180.0 - pos.y * 360.0) * M_PI / 180)) / M_PI - 90.0;
+        point<double> p{x, y};
         feature<double> f(p, getProperties(), std::experimental::make_optional(identifier(static_cast<std::uint64_t>(id))));
         return f;
     }
