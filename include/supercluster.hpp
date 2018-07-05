@@ -31,6 +31,20 @@ struct Cluster {
             std::uint32_t id_)
         : pos(std::move(pos_)), num_points(num_points_), id(id_) {
     }
+
+    feature<double> toGeoJSON() const {
+        point<double> p{pos.x, pos.y}; // TODO unproject
+        feature<double> f(p, getProperties(), std::experimental::make_optional(identifier(static_cast<std::uint64_t>(id))));
+        return f;
+    }
+
+    property_map getProperties() const {
+        property_map properties {};
+        properties["cluster"] = true;
+        properties["cluster_id"] = static_cast<std::uint64_t>(id);
+        properties["point_count"] = static_cast<std::uint64_t>(num_points);
+        return properties;
+    }
 };
 
 } // namespace supercluster
@@ -130,12 +144,12 @@ public:
             TileFeature feature{ point };
 
             if (c.num_points == 1) {
-                feature.properties = this->features[c.id].properties;
+                const auto &original_feature = this->features[c.id];
+                feature.id = original_feature.id;
+                feature.properties = original_feature.properties;
             } else {
                 feature.id.emplace(static_cast<std::uint64_t>(c.id));
-                feature.properties["cluster"] = true;
-                feature.properties["cluster_id"] = static_cast<std::uint64_t>(c.id);
-                feature.properties["point_count"] = static_cast<std::uint64_t>(c.num_points);
+                feature.properties = c.getProperties();
             }
 
             result.push_back(feature);
@@ -156,6 +170,36 @@ public:
         }
 
         return result;
+    }
+
+    GeoJSONFeatures getChildren(std::uint32_t cluster_id) {
+        const auto origin_id = cluster_id >> 5;
+        const auto origin_zoom = cluster_id % 32;
+
+        const auto zoom_iter = zooms.find(origin_zoom);
+        if (zoom_iter == zooms.end())
+            throw std::runtime_error("No cluster with the specified id.");
+
+        auto &zoom = zoom_iter->second;
+        if (origin_id >= zoom.clusters.size())
+            throw std::runtime_error("No cluster with the specified id.");
+
+        const double r = options.radius / (double(options.extent) * std::pow(2, origin_zoom - 1));
+        const auto &origin = zoom.clusters[origin_id];
+
+        GeoJSONFeatures children;
+
+        zoom.tree.within(origin.pos.x, origin.pos.y, r, [&](const auto &id) {
+            const auto &c = zoom.clusters[id];
+            if (c.parent_id == cluster_id) {
+                children.push_back(c.toGeoJSON());
+            }
+        });
+
+        if (children.empty())
+            throw std::runtime_error("No cluster with the specified id.");
+
+        return children;
     }
 
 private:
