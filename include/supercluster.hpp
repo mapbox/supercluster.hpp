@@ -22,17 +22,15 @@ using namespace mapbox::geometry;
 struct Cluster {
     point<double> pos;
     std::uint32_t num_points;
-    std::uint32_t id = 0;
+    std::uint32_t id;
+    std::uint32_t parent_id = 0;
     bool visited = false;
 
     Cluster(point<double> pos_,
             std::uint32_t num_points_,
-            std::uint32_t id_ = 0,
-            bool visited_ = false)
-        : pos(std::move(pos_)),
-          num_points(num_points_),
-          id(id_),
-          visited(visited_) {}
+            std::uint32_t id_)
+        : pos(std::move(pos_)), num_points(num_points_), id(id_) {
+    }
 };
 
 } // namespace supercluster
@@ -109,7 +107,7 @@ public:
         for (int z = options.maxZoom; z >= options.minZoom; z--) {
             // cluster points from the previous zoom level
             const double r = options.radius / (options.extent * std::pow(2, z));
-            zooms.emplace(z, Zoom(zooms[z + 1], r));
+            zooms.emplace(z, Zoom(zooms[z + 1], r, z));
 #ifdef DEBUG_TIMER
             timer(std::to_string(zooms[z].clusters.size()) + " clusters");
 #endif
@@ -134,7 +132,9 @@ public:
             if (c.num_points == 1) {
                 feature.properties = this->features[c.id].properties;
             } else {
+                feature.id.emplace(static_cast<std::uint64_t>(c.id));
                 feature.properties["cluster"] = true;
+                feature.properties["cluster_id"] = static_cast<std::uint64_t>(c.id);
                 feature.properties["point_count"] = static_cast<std::uint64_t>(c.num_points);
             }
 
@@ -170,20 +170,24 @@ private:
             std::uint32_t i = 0;
 
             for (const auto &f : features_) {
-                clusters.push_back({ project(f.geometry.get<GeoJSONPoint>()), 1, i++ });
+                clusters.emplace_back(project(f.geometry.get<GeoJSONPoint>()), 1, i++);
             }
 
             tree.fill(clusters);
         }
 
-        Zoom(Zoom &previous, double r) {
-            for (auto &p : previous.clusters) {
+        Zoom(Zoom &previous, double r, std::uint8_t zoom) {
+            for (std::size_t i = 0; i < previous.clusters.size(); i++) {
+                auto &p = previous.clusters[i];
+
                 if (p.visited)
                     continue;
                 p.visited = true;
 
                 auto num_points = p.num_points;
                 point<double> weight = p.pos * double(num_points);
+
+                std::uint32_t id = (i << 5) + (zoom + 1);
 
                 // find all nearby points
                 previous.tree.within(p.pos.x, p.pos.y, r, [&](const auto &id) {
@@ -193,13 +197,19 @@ private:
                     if (b.visited)
                         return;
                     b.visited = true;
+                    b.parent_id = id;
 
                     // accumulate coordinates for calculating weighted center
                     weight += b.pos * double(b.num_points);
                     num_points += b.num_points;
                 });
 
-                clusters.push_back({ weight / double(num_points), num_points, p.id });
+                if (num_points == 1) {
+                    clusters.emplace_back(weight, 1, p.id);
+                } else {
+                    p.parent_id = id;
+                    clusters.emplace_back(weight / double(num_points), num_points, id);
+                }
             }
 
             tree.fill(clusters);
