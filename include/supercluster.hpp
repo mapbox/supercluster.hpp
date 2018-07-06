@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <iomanip>
+#include <sstream>
 #include <vector>
 
 #ifdef DEBUG_TIMER
@@ -46,6 +48,19 @@ struct Cluster {
         properties["cluster"] = true;
         properties["cluster_id"] = static_cast<std::uint64_t>(id);
         properties["point_count"] = static_cast<std::uint64_t>(num_points);
+
+        std::stringstream ss;
+        if (num_points >= 1000) {
+            ss << std::fixed;
+            if (num_points < 10000) {
+                ss << std::setprecision(1);
+            }
+            ss << double(num_points) / 1000 << "k";
+        } else {
+            ss << num_points;
+        }
+        properties["point_count_abbreviated"] = ss.str();
+
         return properties;
     }
 };
