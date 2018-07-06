@@ -26,22 +26,23 @@ struct Cluster {
     std::uint32_t parent_id = 0;
     bool visited = false;
 
-    Cluster(point<double> pos_,
-            std::uint32_t num_points_,
-            std::uint32_t id_)
+    Cluster(point<double> pos_, std::uint32_t num_points_, std::uint32_t id_)
         : pos(std::move(pos_)), num_points(num_points_), id(id_) {
     }
 
     feature<double> toGeoJSON() const {
         const double x = (pos.x - 0.5) * 360.0;
-        const double y = 360.0 * std::atan(std::exp((180.0 - pos.y * 360.0) * M_PI / 180)) / M_PI - 90.0;
-        point<double> p{x, y};
-        feature<double> f(p, getProperties(), std::experimental::make_optional(identifier(static_cast<std::uint64_t>(id))));
+        const double y =
+            360.0 * std::atan(std::exp((180.0 - pos.y * 360.0) * M_PI / 180)) / M_PI - 90.0;
+        point<double> p{ x, y };
+        feature<double> f(
+            p, getProperties(),
+            std::experimental::make_optional(identifier(static_cast<std::uint64_t>(id))));
         return f;
     }
 
     property_map getProperties() const {
-        property_map properties {};
+        property_map properties{};
         properties["cluster"] = true;
         properties["cluster_id"] = static_cast<std::uint64_t>(id);
         properties["point_count"] = static_cast<std::uint64_t>(num_points);
@@ -204,12 +205,20 @@ public:
         return children;
     }
 
+    GeoJSONFeatures
+    getLeaves(std::uint32_t cluster_id, std::uint32_t limit = 10, std::uint32_t offset = 0) {
+        GeoJSONFeatures leaves;
+        appendLeaves(leaves, cluster_id, limit, offset, 0);
+        return leaves;
+    }
+
     std::uint8_t getClusterExpansionZoom(std::uint32_t cluster_id) {
         auto cluster_zoom = (cluster_id % 32) - 1;
         while (cluster_zoom < options.maxZoom) {
             const auto children = getChildren(cluster_id);
             cluster_zoom++;
-            if (children.size() != 1) break;
+            if (children.size() != 1)
+                break;
 
             const auto &properties = children[0].properties;
             const auto it = properties.find("cluster_id");
@@ -288,6 +297,43 @@ private:
         if (z > options.maxZoom + 1)
             return options.maxZoom + 1;
         return z;
+    }
+
+    std::uint32_t appendLeaves(GeoJSONFeatures &leaves,
+                               std::uint32_t cluster_id,
+                               std::uint32_t limit,
+                               std::uint32_t offset,
+                               std::uint32_t skipped) {
+        const auto children = getChildren(cluster_id);
+
+        for (auto child : children) {
+            const auto &properties = child.properties;
+            const auto cluster_itr = properties.find("cluster");
+
+            if (cluster_itr != properties.end() && cluster_itr->second.get<bool>() == true) {
+                const auto count = static_cast<std::uint32_t>(
+                    properties.find("point_count")->second.get<std::uint64_t>());
+                if (skipped + count <= offset) {
+                    // skip the whole cluster
+                    skipped += count;
+                } else {
+                    // enter the cluster
+                    const auto child_id = static_cast<std::uint32_t>(
+                        properties.find("cluster_id")->second.get<std::uint64_t>());
+                    skipped = appendLeaves(leaves, child_id, limit, offset, skipped);
+                    // exit the cluster
+                }
+            } else if (skipped < offset) {
+                // skip a single point
+                skipped++;
+            } else {
+                // add a single point
+                leaves.push_back(child);
+            }
+            if (leaves.size() == limit)
+                break;
+        }
+        return skipped;
     }
 
     static point<double> project(const GeoJSONPoint &p) {

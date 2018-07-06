@@ -64,4 +64,17 @@ int main() {
     assert(index.getClusterExpansionZoom(353) == 2);
     assert(index.getClusterExpansionZoom(833) == 2);
     assert(index.getClusterExpansionZoom(1857) == 3);
+
+    auto leaves = index.getLeaves(1, 10, 5);
+
+    assert(leaves[0].properties["name"].get<std::string>() == "Niagara Falls");
+    assert(leaves[1].properties["name"].get<std::string>() == "Cape San Blas");
+    assert(leaves[2].properties["name"].get<std::string>() == "Cape Sable");
+    assert(leaves[3].properties["name"].get<std::string>() == "Cape Canaveral");
+    assert(leaves[4].properties["name"].get<std::string>() == "San  Salvador");
+    assert(leaves[5].properties["name"].get<std::string>() == "Cabo Gracias a Dios");
+    assert(leaves[6].properties["name"].get<std::string>() == "I. de Cozumel");
+    assert(leaves[7].properties["name"].get<std::string>() == "Grand Cayman");
+    assert(leaves[8].properties["name"].get<std::string>() == "Miquelon");
+    assert(leaves[9].properties["name"].get<std::string>() == "Cape Bauld");
 }
