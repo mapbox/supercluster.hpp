@@ -58,4 +58,10 @@ int main() {
     assert(children[1].properties["point_count"].get<std::uint64_t>() == 7);
     assert(children[2].properties["point_count"].get<std::uint64_t>() == 2);
     assert(children[3].properties["name"].get<std::string>() == "Bermuda Islands");
+
+    assert(index.getClusterExpansionZoom(1) == 1);
+    assert(index.getClusterExpansionZoom(33) == 1);
+    assert(index.getClusterExpansionZoom(353) == 2);
+    assert(index.getClusterExpansionZoom(833) == 2);
+    assert(index.getClusterExpansionZoom(1857) == 3);
 }

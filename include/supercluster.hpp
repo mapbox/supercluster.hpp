@@ -204,6 +204,24 @@ public:
         return children;
     }
 
+    std::uint8_t getClusterExpansionZoom(std::uint32_t cluster_id) {
+        auto cluster_zoom = (cluster_id % 32) - 1;
+        while (cluster_zoom < options.maxZoom) {
+            const auto children = getChildren(cluster_id);
+            cluster_zoom++;
+            if (children.size() != 1) break;
+
+            const auto &properties = children[0].properties;
+            const auto it = properties.find("cluster_id");
+            if (it != properties.end()) {
+                cluster_id = static_cast<std::uint32_t>(it->second.get<std::uint64_t>());
+            } else {
+                break;
+            }
+        }
+        return cluster_zoom;
+    }
+
 private:
     struct Zoom {
         kdbush::KDBush<Cluster, std::uint32_t> tree;
