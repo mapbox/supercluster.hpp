@@ -28,6 +28,7 @@ int main() {
         const auto lat = json_coords[1].GetDouble();
         mapbox::geometry::point<double> point(lng, lat);
         mapbox::geometry::feature<double> feature{ point };
+        feature.properties["name"] = std::string((*itr)["properties"]["name"].GetString());
         features.push_back(feature);
     }
 
@@ -49,4 +50,12 @@ int main() {
     }
 
     assert(num_points == 196);
+
+    auto children = index.getChildren(1);
+
+    assert(children.size() == 4);
+    assert(children[0].properties["point_count"].get<std::uint64_t>() == 6);
+    assert(children[1].properties["point_count"].get<std::uint64_t>() == 7);
+    assert(children[2].properties["point_count"].get<std::uint64_t>() == 2);
+    assert(children[3].properties["name"].get<std::string>() == "Bermuda Islands");
 }

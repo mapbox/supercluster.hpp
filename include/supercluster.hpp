@@ -191,10 +191,10 @@ public:
 
         GeoJSONFeatures children;
 
-        zoom.tree.within(origin.pos.x, origin.pos.y, r, [&](const auto &id) {
+        zoom.tree.within(origin.pos.x, origin.pos.y, r, [&, this](const auto &id) {
             const auto &c = zoom.clusters[id];
             if (c.parent_id == cluster_id) {
-                children.push_back(c.toGeoJSON());
+                children.push_back(c.num_points == 1 ? this->features[c.id] : c.toGeoJSON());
             }
         });
 
@@ -236,8 +236,8 @@ private:
                 std::uint32_t id = (i << 5) + (zoom + 1);
 
                 // find all nearby points
-                previous.tree.within(p.pos.x, p.pos.y, r, [&](const auto &id) {
-                    auto &b = previous.clusters[id];
+                previous.tree.within(p.pos.x, p.pos.y, r, [&](const auto &neighbor_id) {
+                    auto &b = previous.clusters[neighbor_id];
 
                     // filter out neighbors that are already processed
                     if (b.visited)
