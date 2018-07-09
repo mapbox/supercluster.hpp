@@ -194,9 +194,8 @@ public:
     GeoJSONFeatures getChildren(std::uint32_t cluster_id) {
         GeoJSONFeatures children;
 
-        eachChild(cluster_id, [&, this](const auto &c) {
-            children.push_back(clusterToGeoJSON(c));
-        });
+        eachChild(cluster_id,
+                  [&, this](const auto &c) { children.push_back(clusterToGeoJSON(c)); });
         return children;
     }
 
@@ -205,9 +204,8 @@ public:
         GeoJSONFeatures leaves;
 
         std::uint32_t skipped = 0;
-        eachLeaf(cluster_id, limit, offset, skipped, [&, this](const auto &c) {
-            leaves.push_back(clusterToGeoJSON(c));
-        });
+        eachLeaf(cluster_id, limit, offset, skipped,
+                 [&, this](const auto &c) { leaves.push_back(clusterToGeoJSON(c)); });
         return leaves;
     }
 
@@ -332,13 +330,14 @@ private:
 
     template <typename TVisitor>
     void eachLeaf(const std::uint32_t cluster_id,
-                           std::uint32_t &limit,
-                           const std::uint32_t offset,
-                           std::uint32_t &skipped,
-                           const TVisitor &visitor) {
+                  std::uint32_t &limit,
+                  const std::uint32_t offset,
+                  std::uint32_t &skipped,
+                  const TVisitor &visitor) {
 
         eachChild(cluster_id, [&](const auto &c) {
-            if (limit == 0) return;
+            if (limit == 0)
+                return;
             if (c.num_points > 1) {
                 if (skipped + c.num_points <= offset) {
                     // skip the whole cluster
