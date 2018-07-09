@@ -195,7 +195,7 @@ public:
         GeoJSONFeatures children;
 
         eachChild(cluster_id,
-                  [&, this](const auto &c) { children.push_back(clusterToGeoJSON(c)); });
+                  [&, this](const auto &c) { children.push_back(this->clusterToGeoJSON(c)); });
         return children;
     }
 
@@ -205,7 +205,7 @@ public:
 
         std::uint32_t skipped = 0;
         eachLeaf(cluster_id, limit, offset, skipped,
-                 [&, this](const auto &c) { leaves.push_back(clusterToGeoJSON(c)); });
+                 [&, this](const auto &c) { leaves.push_back(this->clusterToGeoJSON(c)); });
         return leaves;
     }
 
@@ -335,7 +335,7 @@ private:
                   std::uint32_t &skipped,
                   const TVisitor &visitor) {
 
-        eachChild(cluster_id, [&](const auto &c) {
+        eachChild(cluster_id, [&, this](const auto &c) {
             if (limit == 0)
                 return;
             if (c.num_points > 1) {
@@ -344,7 +344,7 @@ private:
                     skipped += c.num_points;
                 } else {
                     // enter the cluster
-                    eachLeaf(c.id, limit, offset, skipped, visitor);
+                    this->eachLeaf(c.id, limit, offset, skipped, visitor);
                     // exit the cluster
                 }
             } else if (skipped < offset) {
@@ -359,7 +359,7 @@ private:
     }
 
     GeoJSONFeature clusterToGeoJSON(const Cluster &c) {
-        return c.num_points == 1 ? this->features[c.id] : c.toGeoJSON();
+        return c.num_points == 1 ? features[c.id] : c.toGeoJSON();
     }
 
     static point<double> project(const GeoJSONPoint &p) {
