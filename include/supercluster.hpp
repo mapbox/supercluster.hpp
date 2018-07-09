@@ -22,13 +22,13 @@ namespace supercluster {
 using namespace mapbox::geometry;
 
 struct Cluster {
-    point<double> pos;
-    std::uint32_t num_points;
+    const point<double> pos;
+    const std::uint32_t num_points;
     std::uint32_t id;
     std::uint32_t parent_id = 0;
     bool visited = false;
 
-    Cluster(point<double> pos_, std::uint32_t num_points_, std::uint32_t id_)
+    Cluster(const point<double> pos_, const std::uint32_t num_points_, const std::uint32_t id_)
         : pos(std::move(pos_)), num_points(num_points_), id(id_) {
     }
 
@@ -36,8 +36,8 @@ struct Cluster {
         const double x = (pos.x - 0.5) * 360.0;
         const double y =
             360.0 * std::atan(std::exp((180.0 - pos.y * 360.0) * M_PI / 180)) / M_PI - 90.0;
-        point<double> p{ x, y };
-        feature<double> f(
+        const point<double> p{ x, y };
+        const feature<double> f(
             p, getProperties(),
             std::experimental::make_optional(identifier(static_cast<std::uint64_t>(id))));
         return f;
@@ -147,35 +147,32 @@ public:
         }
     }
 
-    TileFeatures getTile(std::uint8_t z, std::uint32_t x_, std::uint32_t y) {
+    TileFeatures getTile(const std::uint8_t z, const std::uint32_t x_, const std::uint32_t y) {
         TileFeatures result;
         auto &zoom = zooms[limitZoom(z)];
 
-        std::uint32_t z2 = std::pow(2, z);
-        double const r = static_cast<double>(options.radius) / options.extent;
-        std::int32_t x = static_cast<std::int32_t>(x_);
+        const std::uint32_t z2 = std::pow(2, z);
+        const double r = static_cast<double>(options.radius) / options.extent;
+        std::int32_t x = x_;
 
-        auto visitor = [&, this](const auto &id) {
-            auto const &c = zoom.clusters[id];
+        const auto visitor = [&, this](const auto &id) {
+            const auto &c = zoom.clusters[id];
 
-            TilePoint point(::round(this->options.extent * (c.pos.x * z2 - x)),
-                            ::round(this->options.extent * (c.pos.y * z2 - y)));
-            TileFeature feature{ point };
+            const TilePoint point(::round(this->options.extent * (c.pos.x * z2 - x)),
+                                  ::round(this->options.extent * (c.pos.y * z2 - y)));
 
             if (c.num_points == 1) {
                 const auto &original_feature = this->features[c.id];
-                feature.id = original_feature.id;
-                feature.properties = original_feature.properties;
+                result.emplace_back(point, original_feature.properties, original_feature.id);
             } else {
-                feature.id.emplace(static_cast<std::uint64_t>(c.id));
-                feature.properties = c.getProperties();
+                result.emplace_back(
+                    point, c.getProperties(),
+                    std::experimental::make_optional(identifier(static_cast<std::uint64_t>(c.id))));
             }
-
-            result.push_back(feature);
         };
 
-        double const top = (y - r) / z2;
-        double const bottom = (y + 1 + r) / z2;
+        const double top = (y - r) / z2;
+        const double bottom = (y + 1 + r) / z2;
 
         zoom.tree.range((x - r) / z2, top, (x + 1 + r) / z2, bottom, visitor);
 
@@ -191,20 +188,20 @@ public:
         return result;
     }
 
-    GeoJSONFeatures getChildren(std::uint32_t cluster_id) {
+    GeoJSONFeatures getChildren(const std::uint32_t cluster_id) {
         GeoJSONFeatures children;
-
         eachChild(cluster_id,
                   [&, this](const auto &c) { children.push_back(this->clusterToGeoJSON(c)); });
         return children;
     }
 
-    GeoJSONFeatures
-    getLeaves(std::uint32_t cluster_id, std::uint32_t limit = 10, std::uint32_t offset = 0) {
+    GeoJSONFeatures getLeaves(const std::uint32_t cluster_id,
+                              const std::uint32_t limit = 10,
+                              const std::uint32_t offset = 0) {
         GeoJSONFeatures leaves;
-
         std::uint32_t skipped = 0;
-        eachLeaf(cluster_id, limit, offset, skipped,
+        std::uint32_t limit_ = limit;
+        eachLeaf(cluster_id, limit_, offset, skipped,
                  [&, this](const auto &c) { leaves.push_back(this->clusterToGeoJSON(c)); });
         return leaves;
     }
@@ -245,7 +242,7 @@ private:
             tree.fill(clusters);
         }
 
-        Zoom(Zoom &previous, double r, std::uint8_t zoom) {
+        Zoom(Zoom &previous, const double r, const std::uint8_t zoom) {
             for (std::size_t i = 0; i < previous.clusters.size(); i++) {
                 auto &p = previous.clusters[i];
 
@@ -256,7 +253,7 @@ private:
                 auto num_points = p.num_points;
                 point<double> weight = p.pos * double(num_points);
 
-                std::uint32_t id = (i << 5) + (zoom + 1);
+                const std::uint32_t id = (i << 5) + (zoom + 1);
 
                 // find all nearby points
                 previous.tree.within(p.pos.x, p.pos.y, r, [&](const auto &neighbor_id) {
@@ -287,7 +284,7 @@ private:
 
     std::unordered_map<std::uint8_t, Zoom> zooms;
 
-    std::uint8_t limitZoom(std::uint8_t z) {
+    std::uint8_t limitZoom(const std::uint8_t z) {
         if (z < options.minZoom)
             return options.minZoom;
         if (z > options.maxZoom + 1)
@@ -296,7 +293,7 @@ private:
     }
 
     template <typename TVisitor>
-    void eachChild(std::uint32_t cluster_id, const TVisitor &visitor) {
+    void eachChild(const std::uint32_t cluster_id, const TVisitor &visitor) {
         const auto origin_id = cluster_id >> 5;
         const auto origin_zoom = cluster_id % 32;
 
@@ -363,10 +360,10 @@ private:
     }
 
     static point<double> project(const GeoJSONPoint &p) {
-        auto lngX = p.x / 360 + 0.5;
+        const auto lngX = p.x / 360 + 0.5;
         const double sine = std::sin(p.y * M_PI / 180);
         const double y = 0.5 - 0.25 * std::log((1 + sine) / (1 - sine)) / M_PI;
-        auto latY = std::min(std::max(y, 0.0), 1.0);
+        const auto latY = std::min(std::max(y, 0.0), 1.0);
         return { lngX, latY };
     }
 };
