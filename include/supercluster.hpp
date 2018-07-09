@@ -59,7 +59,7 @@ struct Cluster {
         } else {
             ss << num_points;
         }
-        properties["point_count_abbreviated"] = ss.str();
+        properties.emplace("point_count_abbreviated", ss.str());
 
         return properties;
     }
@@ -115,6 +115,7 @@ struct Options {
 
 class Supercluster {
     using GeoJSONPoint = point<double>;
+    using GeoJSONFeature = feature<double>;
     using GeoJSONFeatures = feature_collection<double>;
 
     using TilePoint = point<std::int16_t>;
@@ -191,39 +192,22 @@ public:
     }
 
     GeoJSONFeatures getChildren(std::uint32_t cluster_id) {
-        const auto origin_id = cluster_id >> 5;
-        const auto origin_zoom = cluster_id % 32;
-
-        const auto zoom_iter = zooms.find(origin_zoom);
-        if (zoom_iter == zooms.end())
-            throw std::runtime_error("No cluster with the specified id.");
-
-        auto &zoom = zoom_iter->second;
-        if (origin_id >= zoom.clusters.size())
-            throw std::runtime_error("No cluster with the specified id.");
-
-        const double r = options.radius / (double(options.extent) * std::pow(2, origin_zoom - 1));
-        const auto &origin = zoom.clusters[origin_id];
-
         GeoJSONFeatures children;
 
-        zoom.tree.within(origin.pos.x, origin.pos.y, r, [&, this](const auto &id) {
-            const auto &c = zoom.clusters[id];
-            if (c.parent_id == cluster_id) {
-                children.push_back(c.num_points == 1 ? this->features[c.id] : c.toGeoJSON());
-            }
+        eachChild(cluster_id, [&, this](const auto &c) {
+            children.push_back(clusterToGeoJSON(c));
         });
-
-        if (children.empty())
-            throw std::runtime_error("No cluster with the specified id.");
-
         return children;
     }
 
     GeoJSONFeatures
     getLeaves(std::uint32_t cluster_id, std::uint32_t limit = 10, std::uint32_t offset = 0) {
         GeoJSONFeatures leaves;
-        appendLeaves(leaves, cluster_id, limit, offset, 0);
+
+        std::uint32_t skipped = 0;
+        eachLeaf(cluster_id, limit, offset, skipped, [&, this](const auto &c) {
+            leaves.push_back(clusterToGeoJSON(c));
+        });
         return leaves;
     }
 
@@ -314,41 +298,70 @@ private:
         return z;
     }
 
-    std::uint32_t appendLeaves(GeoJSONFeatures &leaves,
-                               std::uint32_t cluster_id,
-                               std::uint32_t limit,
-                               std::uint32_t offset,
-                               std::uint32_t skipped) {
-        const auto children = getChildren(cluster_id);
+    template <typename TVisitor>
+    void eachChild(std::uint32_t cluster_id, const TVisitor &visitor) {
+        const auto origin_id = cluster_id >> 5;
+        const auto origin_zoom = cluster_id % 32;
 
-        for (auto child : children) {
-            const auto &properties = child.properties;
-            const auto cluster_itr = properties.find("cluster");
+        const auto zoom_iter = zooms.find(origin_zoom);
+        if (zoom_iter == zooms.end()) {
+            throw std::runtime_error("No cluster with the specified id.");
+        }
 
-            if (cluster_itr != properties.end() && cluster_itr->second.get<bool>() == true) {
-                const auto count = static_cast<std::uint32_t>(
-                    properties.find("point_count")->second.get<std::uint64_t>());
-                if (skipped + count <= offset) {
+        auto &zoom = zoom_iter->second;
+        if (origin_id >= zoom.clusters.size()) {
+            throw std::runtime_error("No cluster with the specified id.");
+        }
+
+        const double r = options.radius / (double(options.extent) * std::pow(2, origin_zoom - 1));
+        const auto &origin = zoom.clusters[origin_id];
+
+        bool hasChildren = false;
+
+        zoom.tree.within(origin.pos.x, origin.pos.y, r, [&](const auto &id) {
+            const auto &c = zoom.clusters[id];
+            if (c.parent_id == cluster_id) {
+                visitor(c);
+                hasChildren = true;
+            }
+        });
+
+        if (!hasChildren) {
+            throw std::runtime_error("No cluster with the specified id.");
+        }
+    }
+
+    template <typename TVisitor>
+    void eachLeaf(const std::uint32_t cluster_id,
+                           std::uint32_t &limit,
+                           const std::uint32_t offset,
+                           std::uint32_t &skipped,
+                           const TVisitor &visitor) {
+
+        eachChild(cluster_id, [&](const auto &c) {
+            if (limit == 0) return;
+            if (c.num_points > 1) {
+                if (skipped + c.num_points <= offset) {
                     // skip the whole cluster
-                    skipped += count;
+                    skipped += c.num_points;
                 } else {
                     // enter the cluster
-                    const auto child_id = static_cast<std::uint32_t>(
-                        properties.find("cluster_id")->second.get<std::uint64_t>());
-                    skipped = appendLeaves(leaves, child_id, limit, offset, skipped);
+                    eachLeaf(c.id, limit, offset, skipped, visitor);
                     // exit the cluster
                 }
             } else if (skipped < offset) {
                 // skip a single point
                 skipped++;
             } else {
-                // add a single point
-                leaves.push_back(child);
+                // visit a single point
+                visitor(c);
+                limit--;
             }
-            if (leaves.size() == limit)
-                break;
-        }
-        return skipped;
+        });
+    }
+
+    GeoJSONFeature clusterToGeoJSON(const Cluster &c) {
+        return c.num_points == 1 ? this->features[c.id] : c.toGeoJSON();
     }
 
     static point<double> project(const GeoJSONPoint &p) {
