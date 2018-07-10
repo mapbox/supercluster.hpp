@@ -41,10 +41,9 @@ struct Cluster {
     }
 
     property_map getProperties() const {
-        property_map properties{};
-        properties["cluster"] = true;
-        properties["cluster_id"] = static_cast<std::uint64_t>(id);
-        properties["point_count"] = static_cast<std::uint64_t>(num_points);
+        property_map properties{ { "cluster", true },
+                                 { "cluster_id", static_cast<std::uint64_t>(id) },
+                                 { "point_count", static_cast<std::uint64_t>(num_points) } };
 
         std::stringstream ss;
         if (num_points >= 1000) {
