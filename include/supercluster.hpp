@@ -153,6 +153,7 @@ public:
         std::int32_t x = x_;
 
         const auto visitor = [&, this](const auto &id) {
+            assert(id < zoom.clusters.size());
             const auto &c = zoom.clusters[id];
 
             const TilePoint point(::round(this->options.extent * (c.pos.x * z2 - x)),
@@ -254,6 +255,7 @@ private:
 
                 // find all nearby points
                 previous.tree.within(p.pos.x, p.pos.y, r, [&](const auto &neighbor_id) {
+                    assert(neighbor_id < previous.clusters.size());
                     auto &b = previous.clusters[neighbor_id];
 
                     // filter out neighbors that are already processed
@@ -310,6 +312,7 @@ private:
         bool hasChildren = false;
 
         zoom.tree.within(origin.pos.x, origin.pos.y, r, [&](const auto &id) {
+            assert(id < zoom.clusters.size());
             const auto &c = zoom.clusters[id];
             if (c.parent_id == cluster_id) {
                 visitor(c);
