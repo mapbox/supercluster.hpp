@@ -148,7 +148,7 @@ public:
         TileFeatures result;
         auto &zoom = zooms[limitZoom(z)];
 
-        const std::uint32_t z2 = std::pow(2, z);
+        std::uint32_t z2 = std::pow(2, z);
         const double r = static_cast<double>(options.radius) / options.extent;
         std::int32_t x = x_;
 
@@ -250,7 +250,7 @@ private:
                 auto num_points = p.num_points;
                 point<double> weight = p.pos * double(num_points);
 
-                const std::uint32_t id = (i << 5) + (zoom + 1);
+                std::uint32_t id = (i << 5) + (zoom + 1);
 
                 // find all nearby points
                 previous.tree.within(p.pos.x, p.pos.y, r, [&](const auto &neighbor_id) {
