@@ -143,9 +143,12 @@ public:
         }
     }
 
-    TileFeatures getTile(const std::uint8_t z, const std::uint32_t x_, const std::uint32_t y) {
+    TileFeatures getTile(const std::uint8_t z, const std::uint32_t x_, const std::uint32_t y) const {
         TileFeatures result;
-        auto &zoom = zooms[limitZoom(z)];
+
+        const auto zoom_iter = zooms.find(limitZoom(z));
+        assert(zoom_iter != zooms.end());
+        const auto &zoom = zoom_iter->second;
 
         std::uint32_t z2 = std::pow(2, z);
         const double r = static_cast<double>(options.radius) / options.extent;
@@ -185,7 +188,7 @@ public:
         return result;
     }
 
-    GeoJSONFeatures getChildren(const std::uint32_t cluster_id) {
+    GeoJSONFeatures getChildren(const std::uint32_t cluster_id) const {
         GeoJSONFeatures children;
         eachChild(cluster_id,
                   [&, this](const auto &c) { children.push_back(this->clusterToGeoJSON(c)); });
@@ -194,7 +197,7 @@ public:
 
     GeoJSONFeatures getLeaves(const std::uint32_t cluster_id,
                               const std::uint32_t limit = 10,
-                              const std::uint32_t offset = 0) {
+                              const std::uint32_t offset = 0) const {
         GeoJSONFeatures leaves;
         std::uint32_t skipped = 0;
         std::uint32_t limit_ = limit;
@@ -203,7 +206,7 @@ public:
         return leaves;
     }
 
-    std::uint8_t getClusterExpansionZoom(std::uint32_t cluster_id) {
+    std::uint8_t getClusterExpansionZoom(std::uint32_t cluster_id) const {
         auto cluster_zoom = (cluster_id % 32) - 1;
         while (cluster_zoom < options.maxZoom) {
             std::uint32_t num_children = 0;
@@ -282,7 +285,7 @@ private:
 
     std::unordered_map<std::uint8_t, Zoom> zooms;
 
-    std::uint8_t limitZoom(const std::uint8_t z) {
+    std::uint8_t limitZoom(const std::uint8_t z) const {
         if (z < options.minZoom)
             return options.minZoom;
         if (z > options.maxZoom + 1)
@@ -291,7 +294,7 @@ private:
     }
 
     template <typename TVisitor>
-    void eachChild(const std::uint32_t cluster_id, const TVisitor &visitor) {
+    void eachChild(const std::uint32_t cluster_id, const TVisitor &visitor) const {
         const auto origin_id = cluster_id >> 5;
         const auto origin_zoom = cluster_id % 32;
 
@@ -329,7 +332,7 @@ private:
                   std::uint32_t &limit,
                   const std::uint32_t offset,
                   std::uint32_t &skipped,
-                  const TVisitor &visitor) {
+                  const TVisitor &visitor) const {
 
         eachChild(cluster_id, [&, this](const auto &c) {
             if (limit == 0)
@@ -354,7 +357,7 @@ private:
         });
     }
 
-    GeoJSONFeature clusterToGeoJSON(const Cluster &c) {
+    GeoJSONFeature clusterToGeoJSON(const Cluster &c) const {
         return c.num_points == 1 ? features[c.id] : c.toGeoJSON();
     }
 
