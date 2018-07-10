@@ -5,7 +5,7 @@ export MASON = $(MASON_DIR)/mason
 
 VARIANT = variant 1.1.5
 GEOMETRY = geometry 0.9.2
-KDBUSH = kdbush 0.1.1
+KDBUSH = kdbush 0.1.3
 RAPIDJSON = rapidjson 1.1.0
 
 DEPS = `$(MASON) cflags $(VARIANT)` `$(MASON) cflags $(GEOMETRY)` `$(MASON) cflags $(KDBUSH)`
