@@ -28,6 +28,7 @@ int main() {
         const auto lat = json_coords[1].GetDouble();
         mapbox::geometry::point<double> point(lng, lat);
         mapbox::geometry::feature<double> feature{ point };
+        feature.properties["name"] = std::string((*itr)["properties"]["name"].GetString());
         features.push_back(feature);
     }
 
@@ -49,4 +50,31 @@ int main() {
     }
 
     assert(num_points == 196);
+
+    auto children = index.getChildren(1);
+
+    assert(children.size() == 4);
+    assert(children[0].properties["point_count"].get<std::uint64_t>() == 6);
+    assert(children[1].properties["point_count"].get<std::uint64_t>() == 7);
+    assert(children[2].properties["point_count"].get<std::uint64_t>() == 2);
+    assert(children[3].properties["name"].get<std::string>() == "Bermuda Islands");
+
+    assert(index.getClusterExpansionZoom(1) == 1);
+    assert(index.getClusterExpansionZoom(33) == 1);
+    assert(index.getClusterExpansionZoom(353) == 2);
+    assert(index.getClusterExpansionZoom(833) == 2);
+    assert(index.getClusterExpansionZoom(1857) == 3);
+
+    auto leaves = index.getLeaves(1, 10, 5);
+
+    assert(leaves[0].properties["name"].get<std::string>() == "Niagara Falls");
+    assert(leaves[1].properties["name"].get<std::string>() == "Cape San Blas");
+    assert(leaves[2].properties["name"].get<std::string>() == "Cape Sable");
+    assert(leaves[3].properties["name"].get<std::string>() == "Cape Canaveral");
+    assert(leaves[4].properties["name"].get<std::string>() == "San  Salvador");
+    assert(leaves[5].properties["name"].get<std::string>() == "Cabo Gracias a Dios");
+    assert(leaves[6].properties["name"].get<std::string>() == "I. de Cozumel");
+    assert(leaves[7].properties["name"].get<std::string>() == "Grand Cayman");
+    assert(leaves[8].properties["name"].get<std::string>() == "Miquelon");
+    assert(leaves[9].properties["name"].get<std::string>() == "Cape Bauld");
 }

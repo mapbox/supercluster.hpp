@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <iomanip>
+#include <sstream>
 #include <vector>
 
 #ifdef DEBUG_TIMER
@@ -20,16 +22,42 @@ namespace supercluster {
 using namespace mapbox::geometry;
 
 struct Cluster {
-    point<double> pos;
-    std::uint32_t num_points;
+    const point<double> pos;
+    const std::uint32_t num_points;
     std::uint32_t id;
     std::uint32_t parent_id = 0;
     bool visited = false;
 
-    Cluster(point<double> pos_,
-            std::uint32_t num_points_,
-            std::uint32_t id_)
-        : pos(std::move(pos_)), num_points(num_points_), id(id_) {
+    Cluster(const point<double> pos_, const std::uint32_t num_points_, const std::uint32_t id_)
+        : pos(pos_), num_points(num_points_), id(id_) {
+    }
+
+    feature<double> toGeoJSON() const {
+        const double x = (pos.x - 0.5) * 360.0;
+        const double y =
+            360.0 * std::atan(std::exp((180.0 - pos.y * 360.0) * M_PI / 180)) / M_PI - 90.0;
+        return { point<double>{ x, y }, getProperties(),
+                 std::experimental::make_optional(identifier(static_cast<std::uint64_t>(id))) };
+    }
+
+    property_map getProperties() const {
+        property_map properties{ { "cluster", true },
+                                 { "cluster_id", static_cast<std::uint64_t>(id) },
+                                 { "point_count", static_cast<std::uint64_t>(num_points) } };
+
+        std::stringstream ss;
+        if (num_points >= 1000) {
+            ss << std::fixed;
+            if (num_points < 10000) {
+                ss << std::setprecision(1);
+            }
+            ss << double(num_points) / 1000 << "k";
+        } else {
+            ss << num_points;
+        }
+        properties.emplace("point_count_abbreviated", ss.str());
+
+        return properties;
     }
 };
 
@@ -83,6 +111,7 @@ struct Options {
 
 class Supercluster {
     using GeoJSONPoint = point<double>;
+    using GeoJSONFeature = feature<double>;
     using GeoJSONFeatures = feature_collection<double>;
 
     using TilePoint = point<std::int16_t>;
@@ -114,35 +143,33 @@ public:
         }
     }
 
-    TileFeatures getTile(std::uint8_t z, std::uint32_t x_, std::uint32_t y) {
+    TileFeatures getTile(const std::uint8_t z, const std::uint32_t x_, const std::uint32_t y) {
         TileFeatures result;
         auto &zoom = zooms[limitZoom(z)];
 
         std::uint32_t z2 = std::pow(2, z);
-        double const r = static_cast<double>(options.radius) / options.extent;
-        std::int32_t x = static_cast<std::int32_t>(x_);
+        const double r = static_cast<double>(options.radius) / options.extent;
+        std::int32_t x = x_;
 
-        auto visitor = [&, this](const auto &id) {
-            auto const &c = zoom.clusters[id];
+        const auto visitor = [&, this](const auto &id) {
+            assert(id < zoom.clusters.size());
+            const auto &c = zoom.clusters[id];
 
-            TilePoint point(::round(this->options.extent * (c.pos.x * z2 - x)),
-                            ::round(this->options.extent * (c.pos.y * z2 - y)));
-            TileFeature feature{ point };
+            const TilePoint point(::round(this->options.extent * (c.pos.x * z2 - x)),
+                                  ::round(this->options.extent * (c.pos.y * z2 - y)));
 
             if (c.num_points == 1) {
-                feature.properties = this->features[c.id].properties;
+                const auto &original_feature = this->features[c.id];
+                result.emplace_back(point, original_feature.properties, original_feature.id);
             } else {
-                feature.id.emplace(static_cast<std::uint64_t>(c.id));
-                feature.properties["cluster"] = true;
-                feature.properties["cluster_id"] = static_cast<std::uint64_t>(c.id);
-                feature.properties["point_count"] = static_cast<std::uint64_t>(c.num_points);
+                result.emplace_back(
+                    point, c.getProperties(),
+                    std::experimental::make_optional(identifier(static_cast<std::uint64_t>(c.id))));
             }
-
-            result.push_back(feature);
         };
 
-        double const top = (y - r) / z2;
-        double const bottom = (y + 1 + r) / z2;
+        const double top = (y - r) / z2;
+        const double bottom = (y + 1 + r) / z2;
 
         zoom.tree.range((x - r) / z2, top, (x + 1 + r) / z2, bottom, visitor);
 
@@ -156,6 +183,42 @@ public:
         }
 
         return result;
+    }
+
+    GeoJSONFeatures getChildren(const std::uint32_t cluster_id) {
+        GeoJSONFeatures children;
+        eachChild(cluster_id,
+                  [&, this](const auto &c) { children.push_back(this->clusterToGeoJSON(c)); });
+        return children;
+    }
+
+    GeoJSONFeatures getLeaves(const std::uint32_t cluster_id,
+                              const std::uint32_t limit = 10,
+                              const std::uint32_t offset = 0) {
+        GeoJSONFeatures leaves;
+        std::uint32_t skipped = 0;
+        std::uint32_t limit_ = limit;
+        eachLeaf(cluster_id, limit_, offset, skipped,
+                 [&, this](const auto &c) { leaves.push_back(this->clusterToGeoJSON(c)); });
+        return leaves;
+    }
+
+    std::uint8_t getClusterExpansionZoom(std::uint32_t cluster_id) {
+        auto cluster_zoom = (cluster_id % 32) - 1;
+        while (cluster_zoom < options.maxZoom) {
+            std::uint32_t num_children = 0;
+
+            eachChild(cluster_id, [&](const auto &c) {
+                num_children++;
+                cluster_id = c.id;
+            });
+
+            cluster_zoom++;
+
+            if (num_children != 1)
+                break;
+        }
+        return cluster_zoom;
     }
 
 private:
@@ -176,7 +239,7 @@ private:
             tree.fill(clusters);
         }
 
-        Zoom(Zoom &previous, double r, std::uint8_t zoom) {
+        Zoom(Zoom &previous, const double r, const std::uint8_t zoom) {
             for (std::size_t i = 0; i < previous.clusters.size(); i++) {
                 auto &p = previous.clusters[i];
 
@@ -190,8 +253,9 @@ private:
                 std::uint32_t id = (i << 5) + (zoom + 1);
 
                 // find all nearby points
-                previous.tree.within(p.pos.x, p.pos.y, r, [&](const auto &id) {
-                    auto &b = previous.clusters[id];
+                previous.tree.within(p.pos.x, p.pos.y, r, [&](const auto &neighbor_id) {
+                    assert(neighbor_id < previous.clusters.size());
+                    auto &b = previous.clusters[neighbor_id];
 
                     // filter out neighbors that are already processed
                     if (b.visited)
@@ -218,7 +282,7 @@ private:
 
     std::unordered_map<std::uint8_t, Zoom> zooms;
 
-    std::uint8_t limitZoom(std::uint8_t z) {
+    std::uint8_t limitZoom(const std::uint8_t z) {
         if (z < options.minZoom)
             return options.minZoom;
         if (z > options.maxZoom + 1)
@@ -226,11 +290,79 @@ private:
         return z;
     }
 
+    template <typename TVisitor>
+    void eachChild(const std::uint32_t cluster_id, const TVisitor &visitor) {
+        const auto origin_id = cluster_id >> 5;
+        const auto origin_zoom = cluster_id % 32;
+
+        const auto zoom_iter = zooms.find(origin_zoom);
+        if (zoom_iter == zooms.end()) {
+            throw std::runtime_error("No cluster with the specified id.");
+        }
+
+        auto &zoom = zoom_iter->second;
+        if (origin_id >= zoom.clusters.size()) {
+            throw std::runtime_error("No cluster with the specified id.");
+        }
+
+        const double r = options.radius / (double(options.extent) * std::pow(2, origin_zoom - 1));
+        const auto &origin = zoom.clusters[origin_id];
+
+        bool hasChildren = false;
+
+        zoom.tree.within(origin.pos.x, origin.pos.y, r, [&](const auto &id) {
+            assert(id < zoom.clusters.size());
+            const auto &c = zoom.clusters[id];
+            if (c.parent_id == cluster_id) {
+                visitor(c);
+                hasChildren = true;
+            }
+        });
+
+        if (!hasChildren) {
+            throw std::runtime_error("No cluster with the specified id.");
+        }
+    }
+
+    template <typename TVisitor>
+    void eachLeaf(const std::uint32_t cluster_id,
+                  std::uint32_t &limit,
+                  const std::uint32_t offset,
+                  std::uint32_t &skipped,
+                  const TVisitor &visitor) {
+
+        eachChild(cluster_id, [&, this](const auto &c) {
+            if (limit == 0)
+                return;
+            if (c.num_points > 1) {
+                if (skipped + c.num_points <= offset) {
+                    // skip the whole cluster
+                    skipped += c.num_points;
+                } else {
+                    // enter the cluster
+                    this->eachLeaf(c.id, limit, offset, skipped, visitor);
+                    // exit the cluster
+                }
+            } else if (skipped < offset) {
+                // skip a single point
+                skipped++;
+            } else {
+                // visit a single point
+                visitor(c);
+                limit--;
+            }
+        });
+    }
+
+    GeoJSONFeature clusterToGeoJSON(const Cluster &c) {
+        return c.num_points == 1 ? features[c.id] : c.toGeoJSON();
+    }
+
     static point<double> project(const GeoJSONPoint &p) {
-        auto lngX = p.x / 360 + 0.5;
+        const auto lngX = p.x / 360 + 0.5;
         const double sine = std::sin(p.y * M_PI / 180);
         const double y = 0.5 - 0.25 * std::log((1 + sine) / (1 - sine)) / M_PI;
-        auto latY = std::min(std::max(y, 0.0), 1.0);
+        const auto latY = std::min(std::max(y, 0.0), 1.0);
         return { lngX, latY };
     }
 };
