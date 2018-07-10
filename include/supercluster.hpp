@@ -29,18 +29,15 @@ struct Cluster {
     bool visited = false;
 
     Cluster(const point<double> pos_, const std::uint32_t num_points_, const std::uint32_t id_)
-        : pos(std::move(pos_)), num_points(num_points_), id(id_) {
+        : pos(pos_), num_points(num_points_), id(id_) {
     }
 
     feature<double> toGeoJSON() const {
         const double x = (pos.x - 0.5) * 360.0;
         const double y =
             360.0 * std::atan(std::exp((180.0 - pos.y * 360.0) * M_PI / 180)) / M_PI - 90.0;
-        const point<double> p{ x, y };
-        const feature<double> f(
-            p, getProperties(),
-            std::experimental::make_optional(identifier(static_cast<std::uint64_t>(id))));
-        return f;
+        return { point<double>{ x, y }, getProperties(),
+                 std::experimental::make_optional(identifier(static_cast<std::uint64_t>(id))) };
     }
 
     property_map getProperties() const {
