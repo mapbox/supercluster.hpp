@@ -315,9 +315,9 @@ private:
 
         zoom.tree.within(origin.pos.x, origin.pos.y, r, [&](const auto &id) {
             assert(id < zoom.clusters.size());
-            const auto &c = zoom.clusters[id];
-            if (c.parent_id == cluster_id) {
-                visitor(c);
+            const auto &cluster_child = zoom.clusters[id];
+            if (cluster_child.parent_id == cluster_id) {
+                visitor(cluster_child);
                 hasChildren = true;
             }
         });
@@ -334,16 +334,16 @@ private:
                   std::uint32_t &skipped,
                   const TVisitor &visitor) const {
 
-        eachChild(cluster_id, [&, this](const auto &c) {
+        eachChild(cluster_id, [&, this](const auto &cluster_leaf) {
             if (limit == 0)
                 return;
-            if (c.num_points > 1) {
-                if (skipped + c.num_points <= offset) {
+            if (cluster_leaf.num_points > 1) {
+                if (skipped + cluster_leaf.num_points <= offset) {
                     // skip the whole cluster
-                    skipped += c.num_points;
+                    skipped += cluster_leaf.num_points;
                 } else {
                     // enter the cluster
-                    this->eachLeaf(c.id, limit, offset, skipped, visitor);
+                    this->eachLeaf(cluster_leaf.id, limit, offset, skipped, visitor);
                     // exit the cluster
                 }
             } else if (skipped < offset) {
@@ -351,7 +351,7 @@ private:
                 skipped++;
             } else {
                 // visit a single point
-                visitor(c);
+                visitor(cluster_leaf);
                 limit--;
             }
         });
