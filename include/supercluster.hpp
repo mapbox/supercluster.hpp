@@ -253,7 +253,10 @@ private:
                 auto num_points = p.num_points;
                 point<double> weight = p.pos * double(num_points);
 
-                std::uint32_t id = (i << 5) + (zoom + 1);
+                assert((i & ((1 << 27) - 1)) == i); // point_index encoded in the upper 27 bits
+                assert(((zoom + 1) & 0b11111) == (zoom + 1)); // Zoom encoded in the lower 5 bits
+                
+                std::uint32_t id = static_cast<std::uint32_t>((i << 5) + (zoom + 1));
 
                 // find all nearby points
                 previous.tree.within(p.pos.x, p.pos.y, r, [&](const auto &neighbor_id) {
