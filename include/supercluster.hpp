@@ -243,17 +243,26 @@ private:
         }
 
         Zoom(Zoom &previous, const double r, const std::uint8_t zoom) {
-            for (std::size_t i = 0; i < previous.clusters.size(); i++) {
+
+            // The zoom parameter is restricted to [minZoom, maxZoom] by caller
+            assert( ((zoom + 1) & 0b11111) == (zoom + 1) );
+
+            // Since point index is encoded in the upper 27 bits, clamp the count of clusters
+            const auto previous_clusters_size = std::min(previous.clusters.size(), static_cast<std::vector<Cluster>::size_type>(0x7ffffff));
+
+            for (std::size_t i = 0; i < previous_clusters_size; i++) {
                 auto &p = previous.clusters[i];
 
-                if (p.visited)
+                if (p.visited) {
                     continue;
+                }
+
                 p.visited = true;
 
                 auto num_points = p.num_points;
                 point<double> weight = p.pos * double(num_points);
 
-                std::uint32_t id = (i << 5) + (zoom + 1);
+                std::uint32_t id = static_cast<std::uint32_t>((i << 5) + (zoom + 1));
 
                 // find all nearby points
                 previous.tree.within(p.pos.x, p.pos.y, r, [&](const auto &neighbor_id) {
@@ -261,8 +270,10 @@ private:
                     auto &b = previous.clusters[neighbor_id];
 
                     // filter out neighbors that are already processed
-                    if (b.visited)
+                    if (b.visited) {
                         return;
+                    }
+
                     b.visited = true;
                     b.parent_id = id;
 
