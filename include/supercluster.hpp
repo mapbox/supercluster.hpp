@@ -244,34 +244,24 @@ private:
 
         Zoom(Zoom &previous, const double r, const std::uint8_t zoom) {
 
-            // Zoom encoded in the lower 5 bits
-            bool valid_zoom = (((zoom + 1) & 0b11111) == (zoom + 1));
-#ifdef NDEBUG
-            if (!valid_zoom)
-                return;
-#else
-            assert(valid_zoom);
-#endif
+            // The zoom parameter is restricted to [minZoom, maxZoom] by caller
+            assert( ((zoom + 1) & 0b11111) == (zoom + 1) );
 
-            for (std::size_t i = 0; i < previous.clusters.size(); i++) {
+            // Since point index is encoded in the upper 27 bits, clamp the count of clusters
+            const auto previous_clusters_size = std::min(previous.clusters.size(), static_cast<std::vector<Cluster>::size_type>(0x7ffffff));
+
+            for (std::size_t i = 0; i < previous_clusters_size; i++) {
                 auto &p = previous.clusters[i];
 
-                if (p.visited)
+                if (p.visited) {
                     continue;
+                }
+
                 p.visited = true;
 
                 auto num_points = p.num_points;
                 point<double> weight = p.pos * double(num_points);
 
-                // point_index encoded in the upper 27 bits
-                bool valid_point_index = ((i & 0x7ffffff) == i);
-#ifdef NDEBUG
-                if (!valid_point_index)
-                    return;
-#else
-                assert(valid_point_index);
-#endif
-                
                 std::uint32_t id = static_cast<std::uint32_t>((i << 5) + (zoom + 1));
 
                 // find all nearby points
@@ -280,8 +270,10 @@ private:
                     auto &b = previous.clusters[neighbor_id];
 
                     // filter out neighbors that are already processed
-                    if (b.visited)
+                    if (b.visited) {
                         return;
+                    }
+
                     b.visited = true;
                     b.parent_id = id;
 
