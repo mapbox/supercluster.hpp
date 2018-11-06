@@ -208,7 +208,7 @@ public:
 
     std::uint8_t getClusterExpansionZoom(std::uint32_t cluster_id) const {
         auto cluster_zoom = (cluster_id % 32) - 1;
-        while (cluster_zoom < options.maxZoom) {
+        while (cluster_zoom <= options.maxZoom) {
             std::uint32_t num_children = 0;
 
             eachChild(cluster_id, [&](const auto &c) {
