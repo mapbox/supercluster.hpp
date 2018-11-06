@@ -1,4 +1,4 @@
-#include <mapbox/geometry/feature.hpp>
+#include <mapbox/feature.hpp>
 #include <rapidjson/document.h>
 #include <rapidjson/filereadstream.h>
 
@@ -19,7 +19,7 @@ int main() {
 
     const auto &json_features = d["features"];
 
-    mapbox::geometry::feature_collection<double> features;
+    mapbox::feature::feature_collection<double> features;
     features.reserve(json_features.Size());
 
     for (auto itr = json_features.Begin(); itr != json_features.End(); ++itr) {
@@ -27,7 +27,7 @@ int main() {
         const auto lng = json_coords[0].GetDouble();
         const auto lat = json_coords[1].GetDouble();
         mapbox::geometry::point<double> point(lng, lat);
-        mapbox::geometry::feature<double> feature{ point };
+        mapbox::feature::feature<double> feature{ point };
         feature.properties["name"] = std::string((*itr)["properties"]["name"].GetString());
         features.push_back(feature);
     }
@@ -35,7 +35,7 @@ int main() {
     mapbox::supercluster::Options options;
     mapbox::supercluster::Supercluster index(features, options);
 
-    mapbox::geometry::feature_collection<std::int16_t> tile = index.getTile(0, 0, 0);
+    mapbox::feature::feature_collection<std::int16_t> tile = index.getTile(0, 0, 0);
     assert(tile.size() == 39);
 
     std::uint64_t num_points = 0;

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <kdbush.hpp>
-#include <mapbox/geometry/feature.hpp>
+#include <mapbox/feature.hpp>
 #include <mapbox/geometry/point_arithmetic.hpp>
 
 #include <algorithm>
@@ -20,6 +20,7 @@ namespace mapbox {
 namespace supercluster {
 
 using namespace mapbox::geometry;
+using namespace mapbox::feature;
 
 struct Cluster {
     const point<double> pos;
@@ -32,12 +33,12 @@ struct Cluster {
         : pos(pos_), num_points(num_points_), id(id_) {
     }
 
-    feature<double> toGeoJSON() const {
+    mapbox::feature::feature<double> toGeoJSON() const {
         const double x = (pos.x - 0.5) * 360.0;
         const double y =
             360.0 * std::atan(std::exp((180.0 - pos.y * 360.0) * M_PI / 180)) / M_PI - 90.0;
         return { point<double>{ x, y }, getProperties(),
-                 std::experimental::make_optional(identifier(static_cast<std::uint64_t>(id))) };
+                 identifier(static_cast<std::uint64_t>(id)) };
     }
 
     property_map getProperties() const {
@@ -111,11 +112,11 @@ struct Options {
 
 class Supercluster {
     using GeoJSONPoint = point<double>;
-    using GeoJSONFeature = feature<double>;
+    using GeoJSONFeature = mapbox::feature::feature<double>;
     using GeoJSONFeatures = feature_collection<double>;
 
     using TilePoint = point<std::int16_t>;
-    using TileFeature = feature<std::int16_t>;
+    using TileFeature = mapbox::feature::feature<std::int16_t>;
     using TileFeatures = feature_collection<std::int16_t>;
 
 public:
@@ -167,7 +168,7 @@ public:
             } else {
                 result.emplace_back(
                     point, c.getProperties(),
-                    std::experimental::make_optional(identifier(static_cast<std::uint64_t>(c.id))));
+                    identifier(static_cast<std::uint64_t>(c.id)));
             }
         };
 
