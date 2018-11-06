@@ -77,4 +77,12 @@ int main() {
     assert(leaves[7].properties["name"].get<std::string>() == "Grand Cayman");
     assert(leaves[8].properties["name"].get<std::string>() == "Miquelon");
     assert(leaves[9].properties["name"].get<std::string>() == "Cape Bauld");
+
+    mapbox::supercluster::Options options2;
+    options2.radius = 60;
+    options2.extent = 256;
+    options2.maxZoom = 4;
+    mapbox::supercluster::Supercluster index2(features, options2);
+    assert(index2.getClusterExpansionZoom(2436) == 5);
+
 }
