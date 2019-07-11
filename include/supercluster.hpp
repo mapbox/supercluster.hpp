@@ -7,8 +7,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <iomanip>
 #include <sstream>
+#include <utility>
 #include <vector>
 
 #ifdef DEBUG_TIMER
@@ -28,9 +30,17 @@ struct Cluster {
     std::uint32_t id;
     std::uint32_t parent_id = 0;
     bool visited = false;
+    property_map properties{};
 
     Cluster(const point<double> pos_, const std::uint32_t num_points_, const std::uint32_t id_)
         : pos(pos_), num_points(num_points_), id(id_) {
+    }
+
+    Cluster(const point<double> pos_,
+            const std::uint32_t num_points_,
+            const std::uint32_t id_,
+            const property_map &properties_)
+        : pos(pos_), num_points(num_points_), id(id_), properties(properties_) {
     }
 
     mapbox::feature::feature<double> toGeoJSON() const {
@@ -41,11 +51,14 @@ struct Cluster {
                  identifier(static_cast<std::uint64_t>(id)) };
     }
 
-    property_map getProperties() const {
-        property_map properties{ { "cluster", true },
-                                 { "cluster_id", static_cast<std::uint64_t>(id) },
-                                 { "point_count", static_cast<std::uint64_t>(num_points) } };
+    void addProperty(const std::pair<std::string, const value> &val) {
+        properties.emplace(std::move(val));
+    }
 
+    property_map getProperties() const {
+        property_map result{ { "cluster", true },
+                             { "cluster_id", static_cast<std::uint64_t>(id) },
+                             { "point_count", static_cast<std::uint64_t>(num_points) } };
         std::stringstream ss;
         if (num_points >= 1000) {
             ss << std::fixed;
@@ -56,9 +69,12 @@ struct Cluster {
         } else {
             ss << num_points;
         }
-        properties.emplace("point_count_abbreviated", ss.str());
+        result.emplace("point_count_abbreviated", ss.str());
+        for (const auto &property : properties) {
+            result.emplace(property);
+        }
 
-        return properties;
+        return result;
     }
 };
 
@@ -108,6 +124,10 @@ struct Options {
     std::uint8_t maxZoom = 16;  // max zoom level to cluster the points on
     std::uint16_t radius = 40;  // cluster radius in pixels
     std::uint16_t extent = 512; // tile extent (radius is calculated relative to it)
+
+    std::function<property_map(const property_map &)> map =
+        [](const property_map &) -> property_map { return {}; };
+    std::function<void(property_map &, const property_map &)> reduce{ nullptr };
 };
 
 class Supercluster {
@@ -130,21 +150,22 @@ public:
         Timer timer;
 #endif
         // convert and index initial points
-        zooms.emplace(options.maxZoom + 1, features);
+        zooms.emplace(options.maxZoom + 1, Zoom(features, options));
 #ifdef DEBUG_TIMER
         timer(std::to_string(features.size()) + " initial points");
 #endif
         for (int z = options.maxZoom; z >= options.minZoom; z--) {
             // cluster points from the previous zoom level
             const double r = options.radius / (options.extent * std::pow(2, z));
-            zooms.emplace(z, Zoom(zooms[z + 1], r, z));
+            zooms.emplace(z, Zoom(zooms[z + 1], r, z, options));
 #ifdef DEBUG_TIMER
             timer(std::to_string(zooms[z].clusters.size()) + " clusters");
 #endif
         }
     }
 
-    TileFeatures getTile(const std::uint8_t z, const std::uint32_t x_, const std::uint32_t y) const {
+    TileFeatures
+    getTile(const std::uint8_t z, const std::uint32_t x_, const std::uint32_t y) const {
         TileFeatures result;
 
         const auto zoom_iter = zooms.find(limitZoom(z));
@@ -166,9 +187,8 @@ public:
                 const auto &original_feature = this->features[c.id];
                 result.emplace_back(point, original_feature.properties, original_feature.id);
             } else {
-                result.emplace_back(
-                    point, c.getProperties(),
-                    identifier(static_cast<std::uint64_t>(c.id)));
+                result.emplace_back(point, c.getProperties(),
+                                    identifier(static_cast<std::uint64_t>(c.id)));
             }
         };
 
@@ -232,24 +252,31 @@ private:
 
         Zoom() = default;
 
-        Zoom(const GeoJSONFeatures &features_) {
+        Zoom(const GeoJSONFeatures &features_, const Options &options_) {
             // generate a cluster object for each point
             std::uint32_t i = 0;
-
+            clusters.reserve(features_.size());
             for (const auto &f : features_) {
-                clusters.emplace_back(project(f.geometry.get<GeoJSONPoint>()), 1, i++);
+                auto cluster = Cluster(project(f.geometry.get<GeoJSONPoint>()), 1, i++);
+                auto clusterProperties = options_.map(f.properties);
+                for (const auto &p : clusterProperties) {
+                    cluster.addProperty(p);
+                }
+
+                clusters.emplace_back(std::move(cluster));
             }
 
             tree.fill(clusters);
         }
 
-        Zoom(Zoom &previous, const double r, const std::uint8_t zoom) {
+        Zoom(Zoom &previous, const double r, const std::uint8_t zoom, const Options &options_) {
 
             // The zoom parameter is restricted to [minZoom, maxZoom] by caller
-            assert( ((zoom + 1) & 0b11111) == (zoom + 1) );
+            assert(((zoom + 1) & 0b11111) == (zoom + 1));
 
             // Since point index is encoded in the upper 27 bits, clamp the count of clusters
-            const auto previous_clusters_size = std::min(previous.clusters.size(), static_cast<std::vector<Cluster>::size_type>(0x7ffffff));
+            const auto previous_clusters_size = std::min(
+                previous.clusters.size(), static_cast<std::vector<Cluster>::size_type>(0x7ffffff));
 
             for (std::size_t i = 0; i < previous_clusters_size; i++) {
                 auto &p = previous.clusters[i];
@@ -263,6 +290,7 @@ private:
                 auto num_points = p.num_points;
                 point<double> weight = p.pos * double(num_points);
 
+                auto clusterProperties = !options_.reduce ? property_map{} : p.properties;
                 std::uint32_t id = static_cast<std::uint32_t>((i << 5) + (zoom + 1));
 
                 // find all nearby points
@@ -281,13 +309,19 @@ private:
                     // accumulate coordinates for calculating weighted center
                     weight += b.pos * double(b.num_points);
                     num_points += b.num_points;
+
+                    if (options_.reduce) {
+                        // apply reduce function to update clusterProperites
+                        options_.reduce(clusterProperties, b.properties);
+                    }
                 });
 
                 if (num_points == 1) {
-                    clusters.emplace_back(weight, 1, p.id);
+                    clusters.emplace_back(weight, 1, p.id, clusterProperties);
                 } else {
                     p.parent_id = id;
-                    clusters.emplace_back(weight / double(num_points), num_points, id);
+                    clusters.emplace_back(weight / double(num_points), num_points, id,
+                                          clusterProperties);
                 }
             }
 
