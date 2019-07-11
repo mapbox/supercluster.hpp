@@ -126,7 +126,7 @@ struct Options {
     std::uint16_t extent = 512; // tile extent (radius is calculated relative to it)
 
     std::function<property_map(const property_map &)> map =
-        [](const property_map &) -> property_map { return {}; };
+        [](const property_map &) -> property_map { return property_map{}; };
     std::function<void(property_map &, const property_map &)> reduce{ nullptr };
 };
 
