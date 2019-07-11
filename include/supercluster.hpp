@@ -258,7 +258,7 @@ private:
             clusters.reserve(features_.size());
             for (const auto &f : features_) {
                 auto cluster = Cluster(project(f.geometry.get<GeoJSONPoint>()), 1, i++);
-                auto clusterProperties = options_.map(f.properties);
+                const auto clusterProperties = options_.map(f.properties);
                 for (const auto &p : clusterProperties) {
                     cluster.addProperty(p);
                 }

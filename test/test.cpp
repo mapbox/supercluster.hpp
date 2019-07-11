@@ -93,8 +93,6 @@ int main() {
         auto iter = properties.find("scalerank");
         if (iter != properties.end()) {
             ret["sum"] = iter->second.get<std::uint64_t>();
-        } else {
-            std::cout << "cannot find scalerank" << std::endl;
         }
         return ret;
     };
