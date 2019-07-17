@@ -126,7 +126,7 @@ struct Options {
     std::uint16_t extent = 512; // tile extent (radius is calculated relative to it)
 
     std::function<property_map(const property_map &)> map =
-        [](const property_map &) -> property_map { return property_map{}; };
+        [](const property_map &p) -> property_map { return p; };
     std::function<void(property_map &, const property_map &)> reduce{ nullptr };
 };
 
@@ -252,20 +252,14 @@ private:
 
         Zoom() = default;
 
-        Zoom(const GeoJSONFeatures &features_, const Options &options_) {
-            // generate a cluster object for each point
+        Zoom(const GeoJSONFeatures &features_, const Options &options_ ) {
+            // generate a cluster object for each pointx
             std::uint32_t i = 0;
             clusters.reserve(features_.size());
             for (const auto &f : features_) {
-                auto cluster = Cluster(project(f.geometry.get<GeoJSONPoint>()), 1, i++);
-                const auto clusterProperties = options_.map(f.properties);
-                for (const auto &p : clusterProperties) {
-                    cluster.addProperty(p);
-                }
-
-                clusters.emplace_back(std::move(cluster));
+                const auto clusterProperties = options_.reduce ? options_.map(f.properties): property_map{};
+                clusters.emplace_back(project(f.geometry.get<GeoJSONPoint>()), 1, i++, clusterProperties);
             }
-
             tree.fill(clusters);
         }
 
@@ -290,7 +284,7 @@ private:
                 auto num_points = p.num_points;
                 point<double> weight = p.pos * double(num_points);
 
-                auto clusterProperties = !options_.reduce ? property_map{} : p.properties;
+                auto clusterProperties = p.properties;
                 std::uint32_t id = static_cast<std::uint32_t>((i << 5) + (zoom + 1));
 
                 // find all nearby points
