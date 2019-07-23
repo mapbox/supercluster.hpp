@@ -253,7 +253,7 @@ private:
         Zoom() = default;
 
         Zoom(const GeoJSONFeatures &features_, const Options &options_ ) {
-            // generate a cluster object for each pointx
+            // generate a cluster object for each point
             std::uint32_t i = 0;
             clusters.reserve(features_.size());
             for (const auto &f : features_) {
