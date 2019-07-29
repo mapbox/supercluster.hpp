@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <functional>
 #include <iomanip>
+#include <memory>
 #include <sstream>
 #include <utility>
 #include <vector>
@@ -30,7 +31,7 @@ struct Cluster {
     std::uint32_t id;
     std::uint32_t parent_id = 0;
     bool visited = false;
-    property_map properties{};
+    std::unique_ptr<property_map> properties{ nullptr };
 
     Cluster(const point<double> pos_, const std::uint32_t num_points_, const std::uint32_t id_)
         : pos(pos_), num_points(num_points_), id(id_) {
@@ -40,7 +41,10 @@ struct Cluster {
             const std::uint32_t num_points_,
             const std::uint32_t id_,
             const property_map &properties_)
-        : pos(pos_), num_points(num_points_), id(id_), properties(properties_) {
+        : pos(pos_), num_points(num_points_), id(id_) {
+        if (!properties_.empty()) {
+            properties = std::make_unique<property_map>(properties_);
+        }
     }
 
     mapbox::feature::feature<double> toGeoJSON() const {
@@ -49,10 +53,6 @@ struct Cluster {
             360.0 * std::atan(std::exp((180.0 - pos.y * 360.0) * M_PI / 180)) / M_PI - 90.0;
         return { point<double>{ x, y }, getProperties(),
                  identifier(static_cast<std::uint64_t>(id)) };
-    }
-
-    void addProperty(const std::pair<std::string, const value> &val) {
-        properties.emplace(std::move(val));
     }
 
     property_map getProperties() const {
@@ -70,10 +70,11 @@ struct Cluster {
             ss << num_points;
         }
         result.emplace("point_count_abbreviated", ss.str());
-        for (const auto &property : properties) {
-            result.emplace(property);
+        if (properties) {
+            for (const auto &property : *properties) {
+                result.emplace(property);
+            }
         }
-
         return result;
     }
 };
@@ -252,13 +253,18 @@ private:
 
         Zoom() = default;
 
-        Zoom(const GeoJSONFeatures &features_, const Options &options_ ) {
+        Zoom(const GeoJSONFeatures &features_, const Options &options_) {
             // generate a cluster object for each point
             std::uint32_t i = 0;
             clusters.reserve(features_.size());
             for (const auto &f : features_) {
-                const auto clusterProperties = options_.reduce ? options_.map(f.properties): property_map{};
-                clusters.emplace_back(project(f.geometry.get<GeoJSONPoint>()), 1, i++, clusterProperties);
+                if (options_.reduce) {
+                    const auto clusterProperties = options_.map(f.properties);
+                    clusters.emplace_back(project(f.geometry.get<GeoJSONPoint>()), 1, i++,
+                                          clusterProperties);
+                } else {
+                    clusters.emplace_back(project(f.geometry.get<GeoJSONPoint>()), 1, i++);
+                }
             }
             tree.fill(clusters);
         }
@@ -284,7 +290,7 @@ private:
                 auto num_points = p.num_points;
                 point<double> weight = p.pos * double(num_points);
 
-                auto clusterProperties = p.properties;
+                auto clusterProperties = p.properties ? *p.properties : property_map{};
                 std::uint32_t id = static_cast<std::uint32_t>((i << 5) + (zoom + 1));
 
                 // find all nearby points
@@ -304,9 +310,9 @@ private:
                     weight += b.pos * double(b.num_points);
                     num_points += b.num_points;
 
-                    if (options_.reduce) {
+                    if (options_.reduce && b.properties) {
                         // apply reduce function to update clusterProperites
-                        options_.reduce(clusterProperties, b.properties);
+                        options_.reduce(clusterProperties, *b.properties);
                     }
                 });
 
