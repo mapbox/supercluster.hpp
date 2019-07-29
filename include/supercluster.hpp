@@ -11,7 +11,6 @@
 #include <iomanip>
 #include <memory>
 #include <sstream>
-#include <utility>
 #include <vector>
 
 #ifdef DEBUG_TIMER
