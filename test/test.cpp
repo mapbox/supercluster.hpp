@@ -9,16 +9,17 @@
 #include <iostream>
 #include <vector>
 
-int main() {
-    std::FILE *fp = std::fopen("test/fixtures/places.json", "r");
+mapbox::feature::feature_collection<double> parseFeatures(const char *filename) {
+    std::FILE *fp = std::fopen(filename, "r");
     char buffer[65536];
     rapidjson::FileReadStream is(fp, buffer, sizeof(buffer));
 
     rapidjson::Document d;
     d.ParseStream(is);
 
+    std::fclose(fp);
     const auto &json_features = d["features"];
-
+    assert(json_features.IsArray());
     mapbox::feature::feature_collection<double> features;
     features.reserve(json_features.Size());
 
@@ -27,13 +28,41 @@ int main() {
         const auto lng = json_coords[0].GetDouble();
         const auto lat = json_coords[1].GetDouble();
         mapbox::geometry::point<double> point(lng, lat);
+
         mapbox::feature::feature<double> feature{ point };
-        feature.properties["name"] = std::string((*itr)["properties"]["name"].GetString());
-        feature.properties["scalerank"] =
-            std::uint64_t((*itr)["properties"]["scalerank"].GetUint64());
+        const auto &properties = (*itr)["properties"];
+        const auto readProperty = [&feature, &properties](const char *key) {
+            if (properties.HasMember(key)) {
+                const auto &value = properties[key];
+                if (value.IsNull())
+                    feature.properties[key] = std::string("null");
+                if (value.IsString())
+                    feature.properties[key] = std::string(value.GetString());
+                if (value.IsUint64())
+                    feature.properties[key] = std::uint64_t(value.GetUint64());
+                if (value.IsDouble())
+                    feature.properties[key] = value.GetDouble();
+            }
+        };
+        readProperty("name");
+        readProperty("scalerank");
+        readProperty("lat_y");
+        readProperty("long_x");
+        readProperty("region");
+        readProperty("featureclass");
+        readProperty("comment");
+        readProperty("name_alt");
+        readProperty("subregion");
         features.push_back(feature);
     }
 
+    return features;
+}
+
+int main() {
+    const auto features = parseFeatures("test/fixtures/places.json");
+
+    // ----------------------- test 1 ------------------------------------
     mapbox::supercluster::Options options;
     mapbox::supercluster::Supercluster index(features, options);
 
@@ -80,6 +109,7 @@ int main() {
     assert(leaves[8].properties["name"].get<std::string>() == "Miquelon");
     assert(leaves[9].properties["name"].get<std::string>() == "Cape Bauld");
 
+    // ----------------------- test 2 ------------------------------------
     mapbox::supercluster::Options options2;
     options2.radius = 60;
     options2.extent = 256;
@@ -105,6 +135,8 @@ int main() {
                                              iter2->second.get<std::uint64_t>());
         }
     };
+
+    // ----------------------- test 3 ------------------------------------
     mapbox::supercluster::Options options3;
     options3.map = map;
     options3.reduce = reduce;
@@ -116,6 +148,7 @@ int main() {
     assert(tile3[0].properties.count("sum") != 0);
     assert(tile3[0].properties["sum"].get<std::uint64_t>() == 69);
 
+    // ----------------------- test 4 ------------------------------------
     mapbox::supercluster::Options options4;
     options4.radius = 100;
     options4.map = map;
@@ -141,4 +174,26 @@ int main() {
         }
     }
     assert(actualVec1 == expectVec1);
+
+    // ----------------------- test 5 ------------------------------------
+    mapbox::supercluster::Options options5;
+    options5.minPoints = 5;
+    mapbox::supercluster::Supercluster index5(features, options5);
+
+    mapbox::feature::feature_collection<std::int16_t> tile5 = index5.getTile(0, 0, 0);
+    assert(tile5.size() == 49);
+
+    std::uint64_t num_points1 = 0;
+    for (auto &f : tile5) {
+        const auto itr = f.properties.find("cluster");
+        if (itr != f.properties.end() && itr->second.get<bool>()) {
+            const auto &point_count = f.properties["point_count"].get<std::uint64_t>();
+            assert(point_count >= 5);
+            num_points1 += point_count;
+        } else {
+            num_points1 += 1;
+        }
+    }
+
+    assert(num_points1 == 195);
 }
