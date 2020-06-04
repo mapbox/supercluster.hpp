@@ -289,7 +289,7 @@ private:
 
                 const auto num_points_origin = p.num_points;
                 auto num_points = num_points_origin;
-                const auto cluster_size = previous.clusters.size();
+                auto cluster_size = previous.clusters.size();
                 // count the number of points in a potential cluster
                 previous.tree.within(p.pos.x, p.pos.y, r, [&](const auto &neighbor_id) {
                     assert(neighbor_id < cluster_size);
@@ -303,7 +303,7 @@ private:
                 auto clusterProperties = p.properties ? *p.properties : property_map{};
                 if (num_points >= options_.minPoints) { // enough points to form a cluster
                     point<double> weight = p.pos * double(num_points_origin);
-                    const std::uint32_t id = static_cast<std::uint32_t>((i << 5) + (zoom + 1));
+                    std::uint32_t id = static_cast<std::uint32_t>((i << 5) + (zoom + 1));
 
                     // find all nearby points
                     previous.tree.within(p.pos.x, p.pos.y, r, [&](const auto &neighbor_id) {
