@@ -289,10 +289,10 @@ private:
 
                 const auto num_points_origin = p.num_points;
                 auto num_points = num_points_origin;
-
+                const auto cluster_size = previous.clusters.size();
                 // count the number of points in a potential cluster
                 previous.tree.within(p.pos.x, p.pos.y, r, [&](const auto &neighbor_id) {
-                    assert(neighbor_id < previous.clusters.size());
+                    assert(neighbor_id < cluster_size);
                     const auto &b = previous.clusters[neighbor_id];
                     // filter out neighbors that are already processed
                     if (!b.visited) {
@@ -307,7 +307,7 @@ private:
 
                     // find all nearby points
                     previous.tree.within(p.pos.x, p.pos.y, r, [&](const auto &neighbor_id) {
-                        assert(neighbor_id < previous.clusters.size());
+                        assert(neighbor_id < cluster_size);
                         auto &b = previous.clusters[neighbor_id];
 
                         // filter out neighbors that are already processed
@@ -333,7 +333,7 @@ private:
                     clusters.emplace_back(p.pos, 1, p.id, clusterProperties);
                     if (num_points > 1) {
                         previous.tree.within(p.pos.x, p.pos.y, r, [&](const auto &neighbor_id) {
-                            assert(neighbor_id < previous.clusters.size());
+                            assert(neighbor_id < cluster_size);
                             auto &b = previous.clusters[neighbor_id];
                             // filter out neighbors that are already processed
                             if (b.visited) {
