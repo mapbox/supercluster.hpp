@@ -24,7 +24,8 @@ namespace supercluster {
 using namespace mapbox::geometry;
 using namespace mapbox::feature;
 
-struct Cluster {
+class Cluster {
+public:
     const point<double> pos;
     const std::uint32_t num_points;
     std::uint32_t id;
@@ -32,11 +33,11 @@ struct Cluster {
     bool visited = false;
     std::unique_ptr<property_map> properties{ nullptr };
 
-    Cluster(const point<double> pos_, const std::uint32_t num_points_, const std::uint32_t id_)
+    Cluster(const point<double> &pos_, const std::uint32_t num_points_, const std::uint32_t id_)
         : pos(pos_), num_points(num_points_), id(id_) {
     }
 
-    Cluster(const point<double> pos_,
+    Cluster(const point<double> &pos_,
             const std::uint32_t num_points_,
             const std::uint32_t id_,
             const property_map &properties_)
@@ -144,8 +145,8 @@ public:
     const GeoJSONFeatures features;
     const Options options;
 
-    Supercluster(const GeoJSONFeatures &features_, const Options options_ = Options())
-        : features(features_), options(options_) {
+    Supercluster(const GeoJSONFeatures &features_, Options options_ = Options())
+        : features(features_), options(std::move(options_)) {
 
 #ifdef DEBUG_TIMER
         Timer timer;
