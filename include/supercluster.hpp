@@ -24,7 +24,8 @@ namespace supercluster {
 using namespace mapbox::geometry;
 using namespace mapbox::feature;
 
-struct Cluster {
+class Cluster {
+public:
     const point<double> pos;
     const std::uint32_t num_points;
     std::uint32_t id;
@@ -32,11 +33,11 @@ struct Cluster {
     bool visited = false;
     std::unique_ptr<property_map> properties{ nullptr };
 
-    Cluster(const point<double> pos_, const std::uint32_t num_points_, const std::uint32_t id_)
+    Cluster(const point<double> &pos_, const std::uint32_t num_points_, const std::uint32_t id_)
         : pos(pos_), num_points(num_points_), id(id_) {
     }
 
-    Cluster(const point<double> pos_,
+    Cluster(const point<double> &pos_,
             const std::uint32_t num_points_,
             const std::uint32_t id_,
             const property_map &properties_)
@@ -124,6 +125,7 @@ struct Options {
     std::uint8_t maxZoom = 16;  // max zoom level to cluster the points on
     std::uint16_t radius = 40;  // cluster radius in pixels
     std::uint16_t extent = 512; // tile extent (radius is calculated relative to it)
+    std::size_t minPoints = 2;  // minimum points to form a cluster
 
     std::function<property_map(const property_map &)> map =
         [](const property_map &p) -> property_map { return p; };
@@ -143,8 +145,8 @@ public:
     const GeoJSONFeatures features;
     const Options options;
 
-    Supercluster(const GeoJSONFeatures &features_, const Options options_ = Options())
-        : features(features_), options(options_) {
+    Supercluster(const GeoJSONFeatures &features_, Options options_ = Options())
+        : features(features_), options(std::move(options_)) {
 
 #ifdef DEBUG_TIMER
         Timer timer;
@@ -286,41 +288,63 @@ private:
 
                 p.visited = true;
 
-                auto num_points = p.num_points;
-                point<double> weight = p.pos * double(num_points);
-
-                auto clusterProperties = p.properties ? *p.properties : property_map{};
-                std::uint32_t id = static_cast<std::uint32_t>((i << 5) + (zoom + 1));
-
-                // find all nearby points
+                const auto num_points_origin = p.num_points;
+                auto num_points = num_points_origin;
+                auto cluster_size = previous.clusters.size();
+                // count the number of points in a potential cluster
                 previous.tree.within(p.pos.x, p.pos.y, r, [&](const auto &neighbor_id) {
-                    assert(neighbor_id < previous.clusters.size());
-                    auto &b = previous.clusters[neighbor_id];
-
+                    assert(neighbor_id < cluster_size);
+                    const auto &b = previous.clusters[neighbor_id];
                     // filter out neighbors that are already processed
-                    if (b.visited) {
-                        return;
-                    }
-
-                    b.visited = true;
-                    b.parent_id = id;
-
-                    // accumulate coordinates for calculating weighted center
-                    weight += b.pos * double(b.num_points);
-                    num_points += b.num_points;
-
-                    if (options_.reduce && b.properties) {
-                        // apply reduce function to update clusterProperites
-                        options_.reduce(clusterProperties, *b.properties);
+                    if (!b.visited) {
+                        num_points += b.num_points;
                     }
                 });
 
-                if (num_points == 1) {
-                    clusters.emplace_back(weight, 1, p.id, clusterProperties);
-                } else {
+                auto clusterProperties = p.properties ? *p.properties : property_map{};
+                if (num_points >= options_.minPoints) { // enough points to form a cluster
+                    point<double> weight = p.pos * double(num_points_origin);
+                    std::uint32_t id = static_cast<std::uint32_t>((i << 5) + (zoom + 1));
+
+                    // find all nearby points
+                    previous.tree.within(p.pos.x, p.pos.y, r, [&](const auto &neighbor_id) {
+                        assert(neighbor_id < cluster_size);
+                        auto &b = previous.clusters[neighbor_id];
+
+                        // filter out neighbors that are already processed
+                        if (b.visited) {
+                            return;
+                        }
+
+                        b.visited = true;
+                        b.parent_id = id;
+
+                        // accumulate coordinates for calculating weighted center
+                        weight += b.pos * double(b.num_points);
+
+                        if (options_.reduce && b.properties) {
+                            // apply reduce function to update clusterProperites
+                            options_.reduce(clusterProperties, *b.properties);
+                        }
+                    });
                     p.parent_id = id;
                     clusters.emplace_back(weight / double(num_points), num_points, id,
                                           clusterProperties);
+                } else {
+                    clusters.emplace_back(p.pos, 1, p.id, clusterProperties);
+                    if (num_points > 1) {
+                        previous.tree.within(p.pos.x, p.pos.y, r, [&](const auto &neighbor_id) {
+                            assert(neighbor_id < cluster_size);
+                            auto &b = previous.clusters[neighbor_id];
+                            // filter out neighbors that are already processed
+                            if (b.visited) {
+                                return;
+                            }
+                            b.visited = true;
+                            clusters.emplace_back(b.pos, 1, b.id,
+                                                  b.properties ? *b.properties : property_map{});
+                        });
+                    }
                 }
             }
 
