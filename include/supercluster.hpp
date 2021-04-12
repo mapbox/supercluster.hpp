@@ -126,6 +126,7 @@ struct Options {
     std::uint16_t radius = 40;  // cluster radius in pixels
     std::uint16_t extent = 512; // tile extent (radius is calculated relative to it)
     std::size_t minPoints = 2;  // minimum points to form a cluster
+    bool generateId = false;    // whether to generate numeric ids for input features (in vector tiles)
 
     std::function<property_map(const property_map &)> map =
         [](const property_map &p) -> property_map { return p; };
@@ -187,7 +188,9 @@ public:
 
             if (c.num_points == 1) {
                 const auto &original_feature = this->features[c.id];
-                result.emplace_back(point, original_feature.properties, original_feature.id);
+                // Generate feature id if options.generateId is set.
+                auto featureId = options.generateId ? identifier{static_cast<std::uint64_t>(c.id)} : original_feature.id;
+                result.emplace_back(point, original_feature.properties, std::move(featureId));
             } else {
                 result.emplace_back(point, c.getProperties(),
                                     identifier(static_cast<std::uint64_t>(c.id)));

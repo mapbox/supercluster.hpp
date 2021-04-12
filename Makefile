@@ -1,4 +1,4 @@
-CFLAGS += -I include --std=c++14 -Wall -Wextra -Werror -O3
+CFLAGS += -I include --std=c++14 -Wall -Wextra -Werror -Wshadow
 
 export MASON_DIR = $(shell pwd)/.mason
 export MASON = $(MASON_DIR)/mason
@@ -25,11 +25,11 @@ mason_packages: $(MASON_DIR)
 
 build/bench: bench.cpp include/* mason_packages Makefile
 	mkdir -p build
-	$(CXX) bench.cpp $(CFLAGS) $(DEPS) $(RAPIDJSON_DEP) -o build/bench
+	$(CXX) bench.cpp $(CFLAGS) -O3 $(DEPS) $(RAPIDJSON_DEP) -o build/bench
 
 build/test: test/test.cpp include/* mason_packages Makefile
 	mkdir -p build
-	$(CXX) test/test.cpp $(CFLAGS) $(DEPS) $(RAPIDJSON_DEP) -o build/test
+	$(CXX) test/test.cpp $(CFLAGS) -O0 -ggdb3 $(DEPS) $(RAPIDJSON_DEP) -o build/test
 
 run-bench: build/bench
 	./build/bench
