@@ -196,4 +196,18 @@ int main() {
     }
 
     assert(num_points1 == 195);
+
+    // ----------------------- test for generateId -----------------------
+    mapbox::supercluster::Options generateIdoptions;
+    generateIdoptions.generateId = true;
+    mapbox::supercluster::Supercluster generateIdIndex(features, generateIdoptions);
+    std::vector<uint64_t> ids;
+    auto generateIdfeatures = generateIdIndex.getTile(0, 0, 0);
+    for(const auto& feature : generateIdfeatures) {
+        if (feature.properties.find("cluster") == feature.properties.end()) {
+            ids.push_back(feature.id.get<uint64_t>());
+        }
+    }
+
+    assert((ids == std::vector<uint64_t>{12, 20, 21, 22, 24, 28, 30, 62, 81, 118, 119, 125, 81, 118}));
 }
