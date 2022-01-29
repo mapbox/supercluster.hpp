@@ -197,6 +197,40 @@ int main() {
 
     assert(num_points1 == 195);
 
+    // ----------------------- test 6 - getClusters -----------------------
+    mapbox::supercluster::Options options6;
+    mapbox::supercluster::Supercluster index6(features, options6);
+
+    double bbox1[4] = {129.426390, -103.720017, -445.930843, 114.518236};
+    double bbox2[4] = {112.207836, -84.578666, -463.149397, 120.169159};
+    double bbox3[4] = {129.886277, -82.332680, -445.470956, 120.390930};
+    double bbox4[4] = {458.220043, -84.239039, -117.137190, 120.206585};
+    double bbox5[4] = {456.713058, -80.354196, -118.644175, 120.539148};
+    double bbox6[4] = {453.105328, -75.857422, -122.251904, 120.732760};
+    double bbox7[4] = {-180, -90, 180, 90};
+
+    assert(index.getClusters(bbox1, 1).size() == 26);
+    assert(index.getClusters(bbox2, 1).size() == 27);
+    assert(index.getClusters(bbox3, 1).size() == 26);
+    assert(index.getClusters(bbox4, 1).size() == 25);
+    assert(index.getClusters(bbox5, 1).size() == 25);
+    assert(index.getClusters(bbox6, 1).size() == 25);
+    assert(index.getClusters(bbox7, 1).size() == 61);
+
+    // ----------------------- test 7 - getClusters -----------------------
+    const auto getClustersFeatures = parseFeatures("test/fixtures/getClustersPlaces.json");
+
+    mapbox::supercluster::Options getClustersOptions;
+    mapbox::supercluster::Supercluster getClustersIndex(getClustersFeatures, getClustersOptions);
+
+    double nonCrossingBbox[4] = {-179, -10, -177, 10};
+    double crossingBbox[4] = {179, -10, -177, 10};
+
+    const auto nonCrossingClusters = getClustersIndex.getClusters(nonCrossingBbox, 1);
+    const auto crossingClusters = getClustersIndex.getClusters(crossingBbox, 1);
+
+    assert(nonCrossingClusters.size() == crossingClusters.size());
+
     // ----------------------- test for generateId -----------------------
     mapbox::supercluster::Options generateIdoptions;
     generateIdoptions.generateId = true;
